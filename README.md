@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/128.png" width="128px" />
+
 # Vice
 ### A Microphone Util App
 
