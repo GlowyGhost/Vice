@@ -1,29 +1,22 @@
 import 'package:flutter/material.dart';
-
-import 'invoke_js.dart';
+import 'window.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(const App());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class App extends StatelessWidget {
+  const App({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Hello from Flutter!'),
-              const SizedBox(width: 10),
-              TextButton(onPressed: () => invokeJS("greet", const {"name": "Flutter"}), child: const Text('Greet from Rust'))
-            ],
-          ),
-        ),
+      title: "Vice",
+      theme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFF262626),
+        primaryColor: const Color(0xFF262626),
       ),
+      home: const Window(),
     );
   }
 }
