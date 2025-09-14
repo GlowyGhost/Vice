@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'invoke_js.dart';
+
 void main() {
   runApp(const MainApp());
 }
@@ -9,10 +11,17 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       home: Scaffold(
         body: Center(
-          child: Text('Hello World!'),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Hello from Flutter!'),
+              const SizedBox(width: 10),
+              TextButton(onPressed: () => invokeJS("greet", const {"name": "Flutter"}), child: const Text('Greet from Rust'))
+            ],
+          ),
         ),
       ),
     );
