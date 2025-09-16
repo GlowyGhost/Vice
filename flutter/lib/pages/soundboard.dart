@@ -15,10 +15,10 @@ class _SoundboardState extends State<Soundboard> {
     return Scaffold(
       body: Scrollbar(
         controller: scrollController,
-        thumbVisibility: true, // always show scrollbar
-        thickness: 12,         // custom thickness
-        radius: Radius.circular(32), // rounded edges
-        trackVisibility: false, // show track behind thumb
+        thumbVisibility: true,
+        thickness: 12,
+        radius: Radius.circular(32),
+        trackVisibility: false,
         interactive: true,
         child: GridView(
           controller: scrollController,
@@ -70,12 +70,9 @@ class _SoundboardState extends State<Soundboard> {
         print("Button clicked");
         // TODO: Tell Rust to play SFX
       },
-      //Icon(icon, size: 128, color: Colors.white)
-      //Text(text, style: TextStyle(fontSize: 48, color: Colors.white))
-
+      
       child: Stack(
         children: [
-          // Main Column: icon at top, text at bottom
           Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -89,14 +86,13 @@ class _SoundboardState extends State<Soundboard> {
               Expanded(
                 flex: 1,
                 child: Center(
-                  child: Text(text, style: TextStyle(fontSize: 48, color: Colors.white)),
+                  child: Text(text, style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
             ],
           ),
-          Positioned(
-            bottom: 8,
-            right: 8,
+          Align(
+            alignment: Alignment.bottomRight,
             child: PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, color: Colors.white, size: 32),
               onSelected: (value) {

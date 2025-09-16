@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'pages/Soundboard.dart';
+import 'pages/soundboard.dart';
+import 'pages/channels.dart';
 
 enum WindowPage { channels, soundboard }
 
@@ -68,7 +69,7 @@ class _WindowState extends State<Window> {
             child: Container(
               color: const Color(0xFF262626),
               child: switch (_currentPage) {
-                WindowPage.channels => const Center(child: Text('Channels Page', style: TextStyle(color: Colors.white))),
+                WindowPage.channels => ChannelsPage(),
                 WindowPage.soundboard => Soundboard(),
               }
             )
