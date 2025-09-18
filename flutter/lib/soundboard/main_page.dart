@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:vice/soundboard/edit_page.dart';
+import 'package:vice/soundboard/page.dart';
 
-class Soundboard extends StatefulWidget {
-  const Soundboard({super.key});
+class SoundboardMain extends StatefulWidget {
+  const SoundboardMain({super.key});
 
   @override
-  State<Soundboard> createState() => _SoundboardState();
+  State<SoundboardMain> createState() => _SoundboardMainState();
 }
 
-class _SoundboardState extends State<Soundboard> {
+class _SoundboardMainState extends State<SoundboardMain> {
   @override
   Widget build(BuildContext context) {
     final ScrollController scrollController = ScrollController();
@@ -93,25 +95,9 @@ class _SoundboardState extends State<Soundboard> {
           ),
           Align(
             alignment: Alignment.bottomRight,
-            child: PopupMenuButton<String>(
+            child: IconButton(
               icon: Icon(Icons.more_vert, color: Colors.white, size: 32),
-              onSelected: (value) {
-                if (value == "Option 1") {
-                  print("Option 1 is selected on $text");
-                } else if (value == "Option 2") {
-                  print("Option 2 is selected on $text");
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: "Option 1",
-                  child: Text("Option 1")
-                ),
-                PopupMenuItem(
-                  value: "Option 2",
-                  child: Text("Option 2")
-                ),
-              ],
+              onPressed: () => {SoundboardPageClass.setPage(SoundboardEdit(name: text))},
             ),
           ),
         ],

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'edit_page.dart';
+import 'page.dart';
 
-class ChannelsPage extends StatefulWidget {
-  const ChannelsPage({super.key});
+class ChannelsMain extends StatefulWidget {
+  const ChannelsMain({super.key});
 
   @override
-  State<ChannelsPage> createState() => _ChannelsPageState();
+  State<ChannelsMain> createState() => _ChannelsMainState();
 }
 
-class _ChannelsPageState extends State<ChannelsPage> {
+class _ChannelsMainState extends State<ChannelsMain> {
   @override
   Widget build(BuildContext context) {
     final ScrollController scrollController = ScrollController();
@@ -159,7 +161,10 @@ class _ChannelsPageState extends State<ChannelsPage> {
 								alignment: Alignment.bottomRight,
 								child: Padding(
 									padding: EdgeInsets.all(12),
-									child: Icon(Icons.more_vert, size: 32, color: Colors.white)
+                  child: IconButton(
+                    onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: text))},
+                    icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
+                  )
 								),
 							),
             ],
