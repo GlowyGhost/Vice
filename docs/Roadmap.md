@@ -6,6 +6,6 @@ Please if you're planning to contributing. Add what you're doing in the roadmap 
 |----|-----|----|-----|
 |UI|Completed|20/09/2025|Small details need to be completed.|
 |Rust and Flutter linking|Completed|20/09/2025|Everything is completed currently.|
-|C++ Background|In progress|20/08/2025
+|C++ Background|In progress|20/09/2025|
 |Device Capture|Not worked on|
 |App Capture|Not worked on|
