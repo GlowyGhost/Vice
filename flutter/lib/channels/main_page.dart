@@ -16,9 +16,9 @@ class ChannelsClass {
   String name;
   String icon;
 	ChannelsColor color;
-  String sound;
+  String device;
 
-  ChannelsClass(this.name, this.icon, this.color, this.sound);
+  ChannelsClass(this.name, this.icon, this.color, this.device);
 }
 
 class ChannelsMain extends StatefulWidget {
@@ -210,7 +210,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
                                   child: Padding(
                                     padding: EdgeInsets.all(12),
                                     child: IconButton(
-                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name))},
+                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], device: channel.device))},
                                       icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
                                     )
                                   ),

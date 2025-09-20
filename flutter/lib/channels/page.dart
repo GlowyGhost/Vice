@@ -53,3 +53,44 @@ class ChannelsPageHolder extends ChangeNotifier {
 }
 
 ChannelsPageHolder ChannelsPageClass = ChannelsPageHolder();
+
+class DeviceDropdown extends StatelessWidget {
+  final List<String> devices;
+  final ValueChanged<String> onDeviceSelected;
+
+  DeviceDropdown({required this.devices, required this.onDeviceSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Color(0xFF363636),
+      insetPadding: EdgeInsets.all(20),
+      child: Container(
+        width: double.maxFinite,
+        height: 300,
+        padding: EdgeInsets.all(16),
+        child: ListView.builder(
+          itemCount: devices.length,
+          itemBuilder: (context, index) {
+            return InkWell(
+              onTap: () {
+                onDeviceSelected(devices[index]);
+                Navigator.pop(context);
+              },
+              child: Padding(
+                padding: EdgeInsets.all(8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Color(0xFF3F3F3F),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(devices[index], style: TextStyle(fontSize: 30, color: Colors.white)),
+                ),
+              )
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

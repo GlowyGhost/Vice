@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) struct SoundboardSFX {
     pub(crate) name: String,
     pub(crate) icon: String,
@@ -14,7 +14,7 @@ pub(crate) struct SoundboardSFX {
     pub(crate) sound: String
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) struct Channel {
     pub(crate) name: String,
     pub(crate) icon: String,

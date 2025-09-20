@@ -144,7 +144,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
 															alignment: Alignment.bottomRight,
 															child: IconButton(
 																icon: Icon(Icons.more_vert, color: Colors.white, size: 32),
-																onPressed: () => {SoundboardPageClass.setPage(SoundboardEdit(name: name))},
+																onPressed: () => {SoundboardPageClass.setPage(SoundboardEdit(name: name, icon: sfx.icon, color: [sfx.color.r, sfx.color.g, sfx.color.b], sound: sfx.sound))},
 															),
 														),
 													],

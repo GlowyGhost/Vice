@@ -40,6 +40,42 @@ pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: Strin
 }
 
 #[tauri::command]
+pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, device: String, oldname: String) -> Result<(), String> {
+    match files::get_settings().unwrap() {
+        None => {return Ok(());}
+        Some(set) => {
+            let mut channels = set.channels;
+
+            if let Some(pos) = channels.iter().position(|c| c.name == oldname) {
+                channels[pos] = Channel { name, icon, color, device };
+            } else {
+                return Err(format!("Channel '{}' not found", oldname));
+            }
+            
+            return files::save_channels(channels);
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound: String, oldname: String) -> Result<(), String> {
+    match files::get_settings().unwrap() {
+        None => {return Ok(());}
+        Some(set) => {
+            let mut sfxs = set.soundboard;
+
+            if let Some(pos) = sfxs.iter().position(|c| c.name == oldname) {
+                sfxs[pos] = SoundboardSFX { name, icon, color, sound };
+            } else {
+                return Err(format!("Channel '{}' not found", oldname));
+            }
+            
+            return files::save_soundboard(sfxs);
+        }
+    }
+}
+
+#[tauri::command]
 pub(crate) fn pick_menu_sound() -> Option<String> {
     if let Some(path) = rfd::FileDialog::new()
         .add_filter("Sound Files", &["mp3", "wav", "ogg", "flac"])

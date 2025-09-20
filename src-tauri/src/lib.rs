@@ -33,7 +33,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![funcs::get_soundboard, funcs::flutter_print, funcs::get_channels, funcs::get_devices, funcs::pick_menu_sound,
-            funcs::new_sound, funcs::new_channel, funcs::play_sound])
+            funcs::new_sound, funcs::new_channel, funcs::play_sound, funcs::edit_channel, funcs::edit_soundboard])
         .run(tauri::generate_context!())
         .expect("error while running tauri app");
 }
