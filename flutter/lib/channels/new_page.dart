@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vice/invoke_js.dart';
 import '../icons.dart';
 import 'main_page.dart';
 import 'page.dart';
@@ -15,18 +16,39 @@ class _ChannelsNewState extends State<ChannelsNew> {
   Color pickerColor = Color(0xFFFF0000);
   Color currentColor = Color(0xFFFF0000);
   String icon = "question_mark";
-  List<String> Devices = ["Audio 1", "Audio 2"]; //TODO: Get rust to actually get all output devices.
+  List<String> Devices = ["Reopen this menu.", "If this persists, check if you have audio devices connected."];
   String selectedDevice = "Select audio device";
+  final TextEditingController controllerName = TextEditingController();
   
+  @override
+  void initState() {
+    super.initState();
+
+    _init();
+  }
+
+  Future<void> _init() async {
+    final devices = await invokeJS("get_devices");
+
+    setState(() {Devices = devices;});
+  }
+
   void changeColor(Color color) {
     setState(() => pickerColor = color);
   }
 
+  Future<void> _save() async {
+    await invokeJS("new_channel", {
+      "color": [currentColor.r*255.toInt(), currentColor.g*255.toInt(), currentColor.b*255.toInt()],
+      "icon": icon,
+      "name": controllerName.text,
+      "device": selectedDevice});
+
+    ChannelsPageClass.setPage(ChannelsMain());
+  }
+
   @override
   Widget build(BuildContext context) {
-    final TextEditingController controllerName = TextEditingController();
-    final TextEditingController controllerSound = TextEditingController();
-
     return Scaffold(
       body: Padding(
         padding: EdgeInsetsGeometry.all(8),
@@ -149,7 +171,7 @@ class _ChannelsNewState extends State<ChannelsNew> {
 				child: Row(
 					children: [
 						ElevatedButton.icon(
-							onPressed: () => {print("Saving")}, //TODO: Actually Save
+							onPressed: _save,
 							icon: const Icon(Icons.save),
 							label: Text("Save", style: TextStyle(fontSize: 18))
 						),
@@ -185,11 +207,6 @@ class DeviceDropdown extends StatelessWidget {
         padding: EdgeInsets.all(16),
         child: ListView.builder(
           itemCount: devices.length,
-          /*gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 10,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-          ),*/
           itemBuilder: (context, index) {
             return InkWell(
               onTap: () {

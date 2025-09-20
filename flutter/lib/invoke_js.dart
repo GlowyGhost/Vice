@@ -18,8 +18,21 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
       return null;
     } else if (result is List) {
       return result.map((e) {
+        if (e is String) {
+          return e;
+        }
+
         final map = toMap(e);
-        return SFXsChannels.fromMap(map);
+
+        if (map.containsKey("name") ||
+            map.containsKey("icon") ||
+            map.containsKey("sound") ||
+            map.containsKey("device") ||
+            map.containsKey("color")) {
+          return SFXsChannels.fromMap(map);
+        }
+
+        return e.toString();
       }).toList();
     }
 

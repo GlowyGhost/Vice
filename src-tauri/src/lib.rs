@@ -3,6 +3,11 @@ use tauri::{WebviewUrl, WebviewWindowBuilder};
 mod files;
 mod funcs;
 
+#[cfg(target_os = "windows")]
+mod win;
+#[cfg(target_os = "linux")]
+mod lin;
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -27,7 +32,8 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![funcs::get_soundboard, funcs::flutter_print, funcs::get_channels])
+        .invoke_handler(tauri::generate_handler![funcs::get_soundboard, funcs::flutter_print, funcs::get_channels, funcs::get_devices, funcs::pick_menu_sound,
+            funcs::new_sound, funcs::new_channel, funcs::play_sound])
         .run(tauri::generate_context!())
         .expect("error while running tauri app");
 }

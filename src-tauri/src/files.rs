@@ -24,8 +24,8 @@ pub(crate) struct Channel {
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Settings {
-    soundboard: Vec<SoundboardSFX>,
-    channels: Vec<Channel>
+    pub(crate) soundboard: Vec<SoundboardSFX>,
+    pub(crate) channels: Vec<Channel>
 }
 
 fn app_base() -> PathBuf {
@@ -85,6 +85,18 @@ pub(crate) fn get_settings() -> Result<Option<Settings>, String> {
     Ok(None)
 }
 
+pub(crate) fn save_settings(settings: &Settings) -> Result<(), String> {
+    let path = settings_json();
+
+    let json_data = serde_json::to_string_pretty(settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    fs::write(&path, json_data)
+        .map_err(|e| format!("Failed to write settings file: {}", e))?;
+
+    Ok(())
+}
+
 pub(crate) fn get_channels() -> Option<Vec<Channel>> {
     match get_settings().unwrap() {
         None => {return None},
@@ -92,9 +104,29 @@ pub(crate) fn get_channels() -> Option<Vec<Channel>> {
     }
 }
 
+pub(crate) fn save_channels(channels: Vec<Channel>) -> Result<(), String> {
+    match get_settings().unwrap() {
+        None => {return Ok(())},
+        Some(mut data) => {
+            data.channels = channels;
+            return save_settings(&data);
+        } 
+    }
+}
+
 pub(crate) fn get_soundboard() -> Option<Vec<SoundboardSFX>> {
     match get_settings().unwrap() {
         None => {return None},
         Some(data) => {return Some(data.soundboard)} 
+    }
+}
+
+pub(crate) fn save_soundboard(soundboard_sfxs: Vec<SoundboardSFX>) -> Result<(), String> {
+    match get_settings().unwrap() {
+        None => {return Ok(())},
+        Some(mut data) => {
+            data.soundboard = soundboard_sfxs;
+            return save_settings(&data);
+        } 
     }
 }

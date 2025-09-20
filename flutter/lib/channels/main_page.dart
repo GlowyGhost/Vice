@@ -9,7 +9,7 @@ class ChannelsColor {
 	int g;
 	int b;
 
-	ChannelsColor(this.r, this.b, this.g);
+	ChannelsColor(this.r, this.g, this.b);
 }
 
 class ChannelsClass {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../icons.dart';
+import '../invoke_js.dart';
 import 'main_page.dart';
 import 'page.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -15,16 +16,25 @@ class _SoundboardNewState extends State<SoundboardNew> {
   Color pickerColor = Color(0xFFFF0000);
   Color currentColor = Color(0xFFFF0000);
   String icon = "question_mark";
+  final TextEditingController controllerName = TextEditingController();
+  final TextEditingController controllerSound = TextEditingController();
   
   void changeColor(Color color) {
     setState(() => pickerColor = color);
   }
 
+  Future<void> _save() async {
+    await invokeJS("new_sound", {
+      "color": [currentColor.r*255.toInt(), currentColor.g*255.toInt(), currentColor.b*255.toInt()],
+      "icon": icon,
+      "name": controllerName.text,
+      "sound": controllerSound.text});
+    
+    SoundboardPageClass.setPage(SoundboardMain());
+  }
+
   @override
   Widget build(BuildContext context) {
-    final TextEditingController controllerName = TextEditingController();
-    final TextEditingController controllerSound = TextEditingController();
-
     return Scaffold(
       body: Padding(
         padding: EdgeInsetsGeometry.all(8),
@@ -70,6 +80,7 @@ class _SoundboardNewState extends State<SoundboardNew> {
                             child: const Text("OK"),
                             onPressed: () {
                               setState(() => currentColor = pickerColor);
+                              printText(currentColor.r.toString());
                               Navigator.of(context).pop();
                             },
                           ),
@@ -140,7 +151,7 @@ class _SoundboardNewState extends State<SoundboardNew> {
                       const SizedBox(width: 16),
 
                       IconButton(
-                        onPressed: () => {controllerSound.text = "In progress"}, //TODO: Use rust to open dialog.
+                        onPressed: () async => {controllerSound.text = await invokeJS("pick_menu_sound")},
                         icon: Icon(Icons.menu, color: Colors.white, size: 96)
                       )
                     ],
@@ -157,7 +168,7 @@ class _SoundboardNewState extends State<SoundboardNew> {
 				child: Row(
 					children: [
 						ElevatedButton.icon(
-							onPressed: () => {print("Saving")}, //TODO: Actually Save
+							onPressed: _save,
 							icon: const Icon(Icons.save),
 							label: Text("Save", style: TextStyle(fontSize: 18))
 						),

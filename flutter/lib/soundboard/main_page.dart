@@ -9,7 +9,7 @@ class SFXColor {
 	int g;
 	int b;
 
-	SFXColor(this.r, this.b, this.g);
+	SFXColor(this.r, this.g, this.b);
 }
 
 class SFXClass {
@@ -116,9 +116,8 @@ class _SoundboardMainState extends State<SoundboardMain> {
 														borderRadius: BorderRadius.circular(24),
 													),
 												),
-												onPressed: () {
-													print("Button clicked");
-													// TODO: Tell Rust to play SFX
+												onPressed: () async {
+													await invokeJS("play_sound", {"sound": sfx.sound});
 												},
 												
 												child: Stack(
