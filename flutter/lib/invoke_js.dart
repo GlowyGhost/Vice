@@ -35,9 +35,9 @@ Map<String, dynamic> toMap(dynamic jsObject) {
     return jsObject;
   } else if (jsObject != null) {
     final map = <String, dynamic>{};
-    final keys = js_util.objectKeys(jsObject); // returns a JS Array
+    final keys = js_util.objectKeys(jsObject);
     for (var i = 0; i < keys.length; i++) {
-      final key = keys[i]?.toString(); // ensure it's a String
+      final key = keys[i]?.toString();
       if (key != null) {
         map[key] = js_util.getProperty(jsObject, key);
       }
@@ -67,7 +67,6 @@ class SFXsChannels {
   final String? icon;
   final String? sound;
   final String? device;
-  //final int? color;
   final List<int>? color;
 
   SFXsChannels({
@@ -80,15 +79,15 @@ class SFXsChannels {
 
   factory SFXsChannels.fromMap(Map<String, dynamic> map) {
     List<int>? parsedColor = [0, 0, 0];
-    if (map['color'] is List) {
-      parsedColor = List<int>.from(map['color']);
+    if (map["color"] is List) {
+      parsedColor = List<int>.from(map["color"]);
     }
 
     return SFXsChannels(
-      name: map['name'],
-      icon: map['icon'],
-      sound: map['sound'],
-      device: map['device'],
+      name: map["name"],
+      icon: map["icon"],
+      sound: map["sound"],
+      device: map["device"],
       color: parsedColor,
     );
   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../invoke_js.dart';
 import 'edit_page.dart';
 import 'page.dart';
-import '../util.dart';
+import '../icons.dart';
 
 class ChannelsColor {
 	int r;

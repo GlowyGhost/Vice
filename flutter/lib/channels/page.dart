@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'edit_page.dart';
 import 'main_page.dart';
+import 'new_page.dart';
 
 class ChannelsManagerDisplay extends StatefulWidget {
   const ChannelsManagerDisplay({super.key});
@@ -22,7 +23,7 @@ class _ChannelsManagerState extends State<ChannelsManagerDisplay> {
               child: Row(
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => {print("Add pressed for channels")},
+                    onPressed: () => {ChannelsPageClass.setPage(ChannelsNew())},
                     icon: const Icon(Icons.add),
                     label: Text("Add"),
                   ),
@@ -44,7 +45,7 @@ class ChannelsPageHolder extends ChangeNotifier {
   Object? page = ChannelsMain();
 
   void setPage(Object? newPage) {
-    if (newPage is ChannelsMain || newPage is ChannelsEdit) {
+    if (newPage is ChannelsMain || newPage is ChannelsEdit || newPage is ChannelsNew) {
       page = newPage;
       notifyListeners();
     }

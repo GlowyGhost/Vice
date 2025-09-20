@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'new_page.dart';
 import 'edit_page.dart';
 import 'main_page.dart';
 
@@ -22,7 +23,7 @@ class _SoundboardManagerState extends State<SoundboardManagerDisplay> {
               child: Row(
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => {print("Add pressed for channels")},
+                    onPressed: () => {SoundboardPageClass.setPage(SoundboardNew())},
                     icon: const Icon(Icons.add),
                     label: Text("Add"),
                   ),
@@ -44,7 +45,7 @@ class SoundboardPageHolder extends ChangeNotifier {
   Object? page = SoundboardMain();
 
   void setPage(Object? newPage) {
-    if (newPage is SoundboardMain || newPage is SoundboardEdit) {
+    if (newPage is SoundboardMain || newPage is SoundboardEdit || newPage is SoundboardNew) {
       page = newPage;
       notifyListeners();
     }
