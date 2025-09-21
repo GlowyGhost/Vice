@@ -17,8 +17,9 @@ class ChannelsClass {
   String icon;
 	ChannelsColor color;
   String device;
+  bool deviceOrApp;
 
-  ChannelsClass(this.name, this.icon, this.color, this.device);
+  ChannelsClass(this.name, this.icon, this.color, this.device, this.deviceOrApp);
 }
 
 class ChannelsMain extends StatefulWidget {
@@ -54,14 +55,14 @@ class _ChannelsMainState extends State<ChannelsMain> {
 
     final channels = await invokeJS("get_channels");
 
-    List<ChannelsClass> covertedChannels = [];
+    List<ChannelsClass> convertedChannels = [];
 
     for (final SFXsChannels channel in channels) {
-			covertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!));
+      convertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!, channel.deviceOrApp!));
     }
     
     setState(() {
-      Channels = covertedChannels;
+      Channels = convertedChannels;
       _loading = false;
     });
   }
@@ -210,7 +211,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
                                   child: Padding(
                                     padding: EdgeInsets.all(12),
                                     child: IconButton(
-                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], device: channel.device))},
+                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], deviceApp: channel.device, deviceBool: channel.deviceOrApp,))},
                                       icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
                                     )
                                   ),

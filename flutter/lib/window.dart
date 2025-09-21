@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'invoke_js.dart';
 import 'soundboard/page.dart';
 import 'channels/page.dart';
 
@@ -13,6 +14,32 @@ class Window extends StatefulWidget {
 
 class _WindowState extends State<Window> {
   WindowPage _currentPage = WindowPage.channels;
+  String outputDevice = "Please wait.";
+  List<String> devices = ["Please wait."];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _init();
+  }
+
+  Future<void> _init() async {
+    final String? device = await invokeJS("get_output");
+    final outputs = await invokeJS("get_outputs");
+
+    setState(() {devices = outputs;});
+
+    if (device != null && device.trim().isNotEmpty) {
+      setState(() {outputDevice = device;});
+    } else {
+      setState(() {outputDevice = "Select your output device.";});
+    }
+  }
+
+  Future<void> _save() async {
+    await invokeJS("set_output", {"output": outputDevice});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +86,24 @@ class _WindowState extends State<Window> {
                     ),
                     onPressed: () => setState(() => _currentPage = WindowPage.soundboard),
                     child: Text("Soundboard", style: TextStyle(fontSize: 32)),
+                  ),
+
+                  Spacer(),
+
+                  TextButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => DeviceDropdown(
+                          devices: devices,
+                          onDeviceSelected: (optionSelected) {
+                            setState(() {outputDevice = optionSelected;});
+                            _save();
+                          },
+                        ),
+                      );
+                    },
+                    child: Text(outputDevice, style: TextStyle(fontSize: 30, color: Colors.white))
                   ),
                 ],
               ),

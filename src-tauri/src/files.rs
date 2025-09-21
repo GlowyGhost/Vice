@@ -19,13 +19,15 @@ pub(crate) struct Channel {
     pub(crate) name: String,
     pub(crate) icon: String,
     pub(crate) color: [u8; 3],
-    pub(crate) device: String
+    pub(crate) device: String,
+    pub(crate) deviceorapp: bool
 }
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Settings {
     pub(crate) soundboard: Vec<SoundboardSFX>,
-    pub(crate) channels: Vec<Channel>
+    pub(crate) channels: Vec<Channel>,
+    pub(crate) output: String,
 }
 
 fn app_base() -> PathBuf {
@@ -57,7 +59,8 @@ pub(crate) fn create_files() {
     if !settings_path.exists() {
         let default_settings = r#"{
     "soundboard": [],
-    "channels": []
+    "channels": [],
+    "output": ""
 }"#;
 
         if let Err(e) = fs::write(&settings_path, default_settings) {
@@ -118,6 +121,13 @@ pub(crate) fn get_soundboard() -> Option<Vec<SoundboardSFX>> {
     match get_settings().unwrap() {
         None => {return None},
         Some(data) => {return Some(data.soundboard)} 
+    }
+}
+
+pub(crate) fn get_output() -> Option<String> {
+    match get_settings().unwrap() {
+        None => {return None},
+        Some(data) => {return Some(data.output)} 
     }
 }
 

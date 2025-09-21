@@ -81,6 +81,7 @@ class SFXsChannels {
   final String? sound;
   final String? device;
   final List<int>? color;
+  final bool? deviceOrApp;
 
   SFXsChannels({
     this.name,
@@ -88,6 +89,7 @@ class SFXsChannels {
     this.sound,
     this.device,
     this.color,
+    this.deviceOrApp,
   });
 
   factory SFXsChannels.fromMap(Map<String, dynamic> map) {
@@ -102,9 +104,7 @@ class SFXsChannels {
       sound: map["sound"],
       device: map["device"],
       color: parsedColor,
+      deviceOrApp: map["deviceorapp"],
     );
   }
-
-  bool get isSound => sound != null;
-  bool get isDevice => device != null;
 }

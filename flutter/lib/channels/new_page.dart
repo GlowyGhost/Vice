@@ -16,8 +16,10 @@ class _ChannelsNewState extends State<ChannelsNew> {
   Color pickerColor = Color(0xFFFF0000);
   Color currentColor = Color(0xFFFF0000);
   String icon = "question_mark";
-  List<String> Devices = ["Reopen this menu.", "If this persists, check if you have audio devices connected."];
-  String selectedDevice = "Select audio device";
+  List<String> devicesApps = ["Reopen this menu.", "If this persists,", "check if you have audio devices connected if you're on option \"Capture device\".", "If you're on \"Capture app\", restart your computer."];
+  String selectedDeviceApp = "Select audio device";
+  String deviceOrApp = "Select audio device";
+  bool device = true;
   final TextEditingController controllerName = TextEditingController();
   
   @override
@@ -28,9 +30,11 @@ class _ChannelsNewState extends State<ChannelsNew> {
   }
 
   Future<void> _init() async {
-    final devices = await invokeJS("get_devices");
+    final result = device
+      ? await invokeJS("get_devices")
+      : await invokeJS("get_apps");
 
-    setState(() {Devices = devices;});
+    setState(() {devicesApps = result;});
   }
 
   void changeColor(Color color) {
@@ -42,7 +46,8 @@ class _ChannelsNewState extends State<ChannelsNew> {
       "color": [currentColor.r*255.toInt(), currentColor.g*255.toInt(), currentColor.b*255.toInt()],
       "icon": icon,
       "name": controllerName.text,
-      "device": selectedDevice});
+      "deviceapps": selectedDeviceApp,
+      "device": device});
 
     ChannelsPageClass.setPage(ChannelsMain());
   }
@@ -150,17 +155,37 @@ class _ChannelsNewState extends State<ChannelsNew> {
                       showDialog(
                         context: context,
                         builder: (context) => DeviceDropdown(
-                          devices: Devices,
+                          devices: devicesApps,
                           onDeviceSelected: (deviceSelected) {
-                            setState(() {selectedDevice = deviceSelected;});
+                            setState(() {selectedDeviceApp = deviceSelected;});
                           },
                         ),
                       );
                     },
-                    child: Text(selectedDevice, style: TextStyle(fontSize: 30, color: Colors.white))
+                    child: Text(selectedDeviceApp, style: TextStyle(fontSize: 30, color: Colors.white))
                   )
                 ),
               ],
+            ),
+
+            Expanded(
+              child: TextButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => DeviceDropdown(
+                      devices: ["Capture device", "Capture app"],
+                      onDeviceSelected: (optionSelected) {
+                        optionSelected == "Capture device"
+                          ? device = true
+                          : device = false;
+                        _init();
+                      },
+                    ),
+                  );
+                },
+                child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: Colors.white))
+              )
             ),
           ],
         ),
