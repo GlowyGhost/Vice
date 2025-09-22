@@ -89,12 +89,12 @@ pub(crate) fn pick_menu_sound() -> Option<String> {
 
 #[tauri::command]
 pub(crate) fn get_devices() -> Vec<String> {
-    return audio::devices();
+    audio::inputs()
 }
 
 #[tauri::command]
 pub(crate) fn get_apps() -> Vec<String> {
-    return vec!["dslkfjhdslkg".to_string(), "fdlkgjdlfkgj".to_string()];
+    audio::get_apps()
 }
 
 #[tauri::command]
@@ -102,9 +102,13 @@ pub(crate) fn set_output(output: String) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(mut set) => {
-            set.output = output;
+            set.output = output.clone();
+
+            let res = files::save_settings(&set);
             
-            return files::save_settings(&set);
+            let _ = audio::init_stream(Some(output));
+
+            res
         }
     }
 }
@@ -116,7 +120,7 @@ pub(crate) fn get_output() -> Option<String> {
 
 #[tauri::command]
 pub(crate) fn get_outputs() -> Vec<String> {
-    vec!["4".to_string(), "5".to_string(), "6".to_string()]
+    audio::outputs()
 }
 
 #[tauri::command]
@@ -126,5 +130,5 @@ pub(crate) fn flutter_print(text: &str) {
 
 #[tauri::command]
 pub(crate) fn play_sound(sound: String) {
-    println!("Playing sound: {}", sound);
+    let _ = audio::play_sfx(&sound);
 }
