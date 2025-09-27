@@ -127,7 +127,7 @@ class IconGridDropdown extends StatelessWidget {
   final List<IconData> icons;
   final ValueChanged<IconData> onIconSelected;
 
-  IconGridDropdown({required this.icons, required this.onIconSelected});
+  const IconGridDropdown({super.key, required this.icons, required this.onIconSelected});
 
   @override
   Widget build(BuildContext context) {

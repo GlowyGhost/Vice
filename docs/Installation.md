@@ -1,6 +1,6 @@
 # Installation
 
-Installation may be a bit awkward due to needing a virtual mic. Vice requires you to install a virtual audio device for input and output. 2 Popular options are [Steelseries Sonar GG](https://steelseries.com/gg/sonar) or [VB-Cable](https://vb-audio.com/Cable) (For Windows). Here's the exact steps of both of them.
+Installation may be a bit awkward due to needing a virtual mic. Vice requires you to install a virtual audio device for input and output. This is required for some apps to recognise the virtual mic and so people without access to their BIOS can still use Vice. 2 Popular options are [Steelseries Sonar GG](https://steelseries.com/gg/sonar) or [VB-Cable](https://vb-audio.com/Cable) (For Windows). Here's the exact steps of both of them.
 
 ## VB-Cable
 1. Download [VB-Cable](https://vb-audio.com/Cable) and go through the installation process. This requires you to restart.

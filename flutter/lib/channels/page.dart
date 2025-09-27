@@ -58,7 +58,7 @@ class DeviceDropdown extends StatelessWidget {
   final List<String> devices;
   final ValueChanged<String> onDeviceSelected;
 
-  DeviceDropdown({required this.devices, required this.onDeviceSelected});
+  const DeviceDropdown({super.key, required this.devices, required this.onDeviceSelected});
 
   @override
   Widget build(BuildContext context) {

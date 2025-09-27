@@ -78,7 +78,7 @@ pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound:
 #[tauri::command]
 pub(crate) fn pick_menu_sound() -> Option<String> {
     if let Some(path) = rfd::FileDialog::new()
-        .add_filter("Sound Files", &["mp3", "wav", "ogg", "flac"])
+        .add_filter("Sound Files", &["wav"])
         .pick_file()
     {
         Some(path.to_string_lossy().to_string())
@@ -104,9 +104,7 @@ pub(crate) fn set_output(output: String) -> Result<(), String> {
         Some(mut set) => {
             set.output = output.clone();
 
-            let res = files::save_settings(&set);
-            
-            let _ = audio::init_stream(Some(output));
+            let res = files::save_settings(&set).map(|_| audio::restart_engine());
 
             res
         }
