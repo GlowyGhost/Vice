@@ -20,7 +20,7 @@ pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps
             let mut channels = set.channels;
 
             channels.push(channel);
-            return files::save_channels(channels);
+            return files::save_channels(channels).map(|_| audio::restart());
         }
     }
 }
@@ -52,7 +52,7 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
                 return Err(format!("Channel '{}' not found", oldname));
             }
             
-            return files::save_channels(channels);
+            return files::save_channels(channels).map(|_| audio::restart());
         }
     }
 }
@@ -68,6 +68,42 @@ pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound:
                 sfxs[pos] = SoundboardSFX{name, icon, color, sound};
             } else {
                 return Err(format!("Soundeffect '{}' not found", oldname));
+            }
+            
+            return files::save_soundboard(sfxs);
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn delete_channel(name: String) -> Result<(), String> {
+    match files::get_settings().unwrap() {
+        None => {return Ok(());}
+        Some(set) => {
+            let mut channels = set.channels;
+
+            if let Some(pos) = channels.iter().position(|c| c.name == name) {
+                channels.remove(pos);
+            } else {
+                return Err(format!("Channel '{}' not found", name));
+            }
+            
+            return files::save_channels(channels).map(|_| audio::restart());
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn delete_soundboard(name: String) -> Result<(), String> {
+    match files::get_settings().unwrap() {
+        None => {return Ok(());}
+        Some(set) => {
+            let mut sfxs = set.soundboard;
+
+            if let Some(pos) = sfxs.iter().position(|c| c.name == name) {
+                sfxs.remove(pos);
+            } else {
+                return Err(format!("Soundeffect '{}' not found", name));
             }
             
             return files::save_soundboard(sfxs);
@@ -104,7 +140,7 @@ pub(crate) fn set_output(output: String) -> Result<(), String> {
         Some(mut set) => {
             set.output = output.clone();
 
-            let res = files::save_settings(&set).map(|_| audio::restart_engine());
+            let res = files::save_settings(&set).map(|_| audio::restart());
 
             res
         }

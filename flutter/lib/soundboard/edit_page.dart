@@ -56,6 +56,12 @@ class _SoundboardEditState extends State<SoundboardEdit> {
     SoundboardPageClass.setPage(SoundboardMain());
   }
 
+  Future<void> _delete() async {
+    await invokeJS("delete_sound", {"name": widget.name});
+
+    SoundboardPageClass.setPage(SoundboardMain());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -201,6 +207,14 @@ class _SoundboardEditState extends State<SoundboardEdit> {
 							onPressed: () => {SoundboardPageClass.setPage(SoundboardMain())},
 							icon: const Icon(Icons.undo_rounded),
 							label: Text("Back", style: TextStyle(fontSize: 18))
+						),
+
+            const SizedBox(width: 16),
+
+            ElevatedButton.icon(
+							onPressed: _delete,
+							icon: const Icon(Icons.delete),
+							label: Text("Delete", style: TextStyle(fontSize: 18))
 						),
 					],
 				)

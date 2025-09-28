@@ -77,6 +77,12 @@ class _ChannelsEditState extends State<ChannelsEdit> {
     ChannelsPageClass.setPage(ChannelsMain());
   }
 
+  Future<void> _delete() async {
+    await invokeJS("delete_channel", {"name": controllerName.text});
+
+    ChannelsPageClass.setPage(ChannelsMain());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -232,6 +238,14 @@ class _ChannelsEditState extends State<ChannelsEdit> {
 							onPressed: () => {ChannelsPageClass.setPage(ChannelsMain())},
 							icon: const Icon(Icons.undo_rounded),
 							label: Text("Back", style: TextStyle(fontSize: 18))
+						),
+
+            const SizedBox(width: 16),
+
+            ElevatedButton.icon(
+							onPressed: _delete,
+							icon: const Icon(Icons.delete),
+							label: Text("Delete", style: TextStyle(fontSize: 18))
 						),
 					],
 				)

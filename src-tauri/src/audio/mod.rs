@@ -89,18 +89,18 @@ pub(crate) fn start() {
                         manage_app(&channel.device, files::get_output().as_deref());
                     }
                 })
-                .expect(&format!("failed to spawn channel thread"));
+                .expect(&format!("Failed to spawn channel thread"));
         }
 
-        println!("Created Audio Threads");
+        println!("Created audio threads");
         return;
     }
 
-    println!("No Threads To Create");
+    println!("No threads to create");
 }
 
-pub(crate) fn restart_engine() {
-    println!("Restarting Audio Engine");
+pub(crate) fn restart() {
+    println!("Restarting audio threads");
 
     unsafe {stop_audio.store(true, Ordering::SeqCst);}
 

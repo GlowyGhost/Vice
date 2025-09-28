@@ -1,5 +1,5 @@
 use std::thread;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,};
 
 mod files;
 mod funcs;
@@ -46,16 +46,24 @@ pub fn create_window() {
             funcs::set_output,
             funcs::get_output,
             funcs::get_outputs,
+            funcs::delete_channel,
+            funcs::delete_soundboard
         ])
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            create_or_show_window(&app.app_handle());
+        }))
         .run(tauri::generate_context!())
         .expect("error while running tauri app");
 }
 
 pub fn run() {
-    thread::Builder::new()
-        .name("audio-thread".into())
-        .spawn(|| audio::start())
-        .expect("failed to spawn audio thread");
+    audio::start();
 
     let args: Vec<String> = std::env::args().collect();
     if !args.contains(&"--background".to_string()) {
