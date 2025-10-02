@@ -94,7 +94,7 @@ pub(crate) fn delete_channel(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn delete_soundboard(name: String) -> Result<(), String> {
+pub(crate) fn delete_sound(name: String) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
@@ -130,7 +130,7 @@ pub(crate) fn get_devices() -> Vec<String> {
 
 #[tauri::command]
 pub(crate) fn get_apps() -> Vec<String> {
-    audio::get_apps()
+    audio::apps()
 }
 
 #[tauri::command]

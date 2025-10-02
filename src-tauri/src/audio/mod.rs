@@ -12,6 +12,7 @@ unsafe extern "C" {
 
     fn get_outputs(len: *mut usize) -> *const *const c_char;
     fn get_inputs(len: *mut usize) -> *const *const c_char;
+    fn get_apps(len: *mut usize) -> *const *const c_char;
     fn play_sound(wav_file: *const c_char, device_name: *const c_char);
     fn device_to_device(input: *const c_char, output: *const c_char);
 }
@@ -59,8 +60,19 @@ pub(crate) fn play_sfx(file_path: &str) {
     unsafe {play_sound(CString::new(file_path).unwrap().as_ptr(), device);}
 }
 
-pub(crate) fn get_apps() -> Vec<String> {
-    return vec!["sdkjfhdsf".to_string()];
+pub(crate) fn apps() -> Vec<String> {
+    unsafe {
+        let mut len: usize = 0;
+        let apps: *const *const c_char = get_apps(&mut len as *mut usize);
+
+        let slice = std::slice::from_raw_parts(apps, len);
+
+        slice.iter()
+            .map(|&cstr_ptr| {
+                CStr::from_ptr(cstr_ptr).to_string_lossy().into_owned()
+            })
+            .collect()
+    }
 }
 
 fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>) {

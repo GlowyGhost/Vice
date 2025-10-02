@@ -2,19 +2,31 @@
 #include <string>
 #include <thread>
 #include <fstream>
+#include <unordered_set>
 #include <iostream>
+#include <cctype>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <audioclient.h>
+#include <audiopolicy.h>
 #include <propvarutil.h>
+#include <tlhelp32.h>
+#include <wtsapi32.h>
 #else
 #include <alsa/asoundlib.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <fstream>
+#include <pulse/pulseaudio.h>
 #endif
 
 static std::vector<std::string> storage;
+static std::vector<const char*> c_strs;
+static std::vector<std::unique_ptr<char[]>> c_copies;
 
 std::string wideToUtf8(const wchar_t* wstr) {
     if (!wstr) return {};
@@ -181,12 +193,37 @@ IMMDevice* find_device_by_name(EDataFlow flow, const char* name) {
 };
 #endif
 
+bool isValidName(const std::string& name) {
+    if (name.empty()) return false;
+
+    if (!std::any_of(name.begin(), name.end(), [](unsigned char c){
+        return std::isalnum(c);
+    })) return false;
+
+    static const std::vector<std::string> blacklist = {
+        "explorer", "TextInputHost", "ApplicationFrameHost", " "
+    };
+    for (auto& bad : blacklist) {
+        if (name == bad) return false;
+    }
+
+    return true;
+}
+
+void clear_statics() {
+    std::thread([]() mutable {
+        Sleep(1);
+        storage.clear();
+        c_strs.clear();
+        c_copies.clear();
+    }).detach();
+}
+
 extern "C" {
     std::atomic<bool> stop_audio(false);
 
     const char** get_outputs(size_t* len) {
         *len = 0;
-        std::vector<const char*> devices;
 
         #ifdef _WIN32
         CoInitialize(nullptr);
@@ -195,11 +232,11 @@ extern "C" {
         IMMDeviceCollection* pDevices = nullptr;
 
         if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum))))
-            return devices.data();
+            return c_strs.data();
 
         if (FAILED(pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices))) {
             pEnum->Release();
-            return devices.data();
+            return c_strs.data();
         }
 
         UINT count; pDevices->GetCount(&count);
@@ -213,7 +250,7 @@ extern "C" {
                     PropVariantInit(&varName);
                     if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
                         storage.emplace_back(wideToUtf8(varName.pwszVal));
-                        devices.push_back(storage.back().c_str());
+                        c_strs.push_back(storage.back().c_str());
                         PropVariantClear(&varName);
                     }
                     pProps->Release();
@@ -227,7 +264,7 @@ extern "C" {
         CoUninitialize();
         #else
         void **hints;
-        if (snd_device_name_hint(-1, "pcm", &hints) < 0) return devices.data();
+        if (snd_device_name_hint(-1, "pcm", &hints) < 0) return c_strs.data();
 
         for (void **n = hints; *n != nullptr; n++) {
             char *name = snd_device_name_get_hint(*n, "NAME");
@@ -235,7 +272,7 @@ extern "C" {
 
             if (!ioid || strcmp(ioid, "Output") == 0) {
                 storage.emplace_back(name);
-                devices.push_back(storage.back().c_str());
+                c_strs.push_back(storage.back().c_str());
             }
 
             if (name) free(name);
@@ -244,13 +281,13 @@ extern "C" {
         snd_device_name_free_hint(hints);
         #endif
 
-        *len = devices.size();
-        return devices.data();
+        clear_statics();
+        *len = c_strs.size();
+        return c_strs.data();
     }
 
     const char** get_inputs(size_t* len) {
         *len = 0;
-        std::vector<const char*> devices;
 
         #ifdef _WIN32
         CoInitialize(nullptr);
@@ -259,11 +296,11 @@ extern "C" {
         IMMDeviceCollection* pDevices = nullptr;
 
         if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum))))
-            return devices.data();
+            return c_strs.data();
 
         if (FAILED(pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pDevices))) {
             pEnum->Release();
-            return devices.data();
+            return c_strs.data();
         }
 
         UINT count; pDevices->GetCount(&count);
@@ -277,7 +314,7 @@ extern "C" {
                     PropVariantInit(&varName);
                     if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
                         storage.emplace_back(wideToUtf8(varName.pwszVal));
-                        devices.push_back(storage.back().c_str());
+                        c_strs.push_back(storage.back().c_str());
                         PropVariantClear(&varName);
                     }
                     pProps->Release();
@@ -291,7 +328,7 @@ extern "C" {
         CoUninitialize();
         #else
         void **hints;
-        if (snd_device_name_hint(-1, "pcm", &hints) < 0) return devices.data();
+        if (snd_device_name_hint(-1, "pcm", &hints) < 0) return c_strs.data();
 
         for (void **n = hints; *n != nullptr; n++) {
             char *name = snd_device_name_get_hint(*n, "NAME");
@@ -299,7 +336,7 @@ extern "C" {
 
             if (!ioid || strcmp(ioid, "Input") == 0) {
                 storage.emplace_back(name);
-                devices.push_back(storage.back().c_str());
+                c_strs.push_back(storage.back().c_str());
             }
 
             if (name) free(name);
@@ -308,8 +345,213 @@ extern "C" {
         snd_device_name_free_hint(hints);
         #endif
 
-        *len = devices.size();
-        return devices.data();
+        clear_statics();
+        *len = c_strs.size();
+        return c_strs.data();
+    }
+
+    const char** get_apps(size_t* len) {
+        *len = 0;
+
+        #ifdef _WIN32
+        std::unordered_set<DWORD> seenPIDs;
+
+        CoInitialize(nullptr);
+
+        IMMDeviceEnumerator* pEnum = nullptr;
+        IMMDevice* pDevice = nullptr;
+        IAudioSessionManager2* pSessionManager = nullptr;
+        IAudioSessionEnumerator* pSessionEnum = nullptr;
+
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum))) &&
+            SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) &&
+            SUCCEEDED(pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&pSessionManager)) &&
+            SUCCEEDED(pSessionManager->GetSessionEnumerator(&pSessionEnum)))
+        {
+            int sessionCount = 0;
+            pSessionEnum->GetCount(&sessionCount);
+
+            for (int i = 0; i < sessionCount; i++) {
+                IAudioSessionControl* pControl = nullptr;
+                if (FAILED(pSessionEnum->GetSession(i, &pControl))) continue;
+
+                IAudioSessionControl2* pControl2 = nullptr;
+                if (SUCCEEDED(pControl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&pControl2))) {
+                    DWORD pid = 0;
+                    if (SUCCEEDED(pControl2->GetProcessId(&pid)) && pid > 0) {
+                        seenPIDs.insert(pid);
+
+                        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                        if (hProcess) {
+                            wchar_t exePath[MAX_PATH] = {};
+                            DWORD size = MAX_PATH;
+                            if (QueryFullProcessImageNameW(hProcess, 0, exePath, &size)) {
+                                std::wstring ws(exePath);
+                                size_t slash = ws.find_last_of(L"\\/");
+                                std::wstring justName = (slash != std::wstring::npos) ? ws.substr(slash + 1) : ws;
+
+                                std::string name = wideToUtf8(justName.c_str());
+                                if (name.size() > 4 && name.substr(name.size() - 4) == ".exe")
+                                    name = name.substr(0, name.size() - 4);
+
+                                if (isValidName(name)) {
+                                    storage.emplace_back(name);
+                                    auto copy = std::make_unique<char[]>(name.size() + 1);
+                                    strcpy(copy.get(), name.c_str());
+                                    c_strs.push_back(copy.get());
+                                    c_copies.push_back(std::move(copy));
+                                }
+                            }
+                            CloseHandle(hProcess);
+                        }
+                    }
+                    pControl2->Release();
+                }
+                pControl->Release();
+            }
+
+            pSessionEnum->Release();
+            pSessionManager->Release();
+            pDevice->Release();
+            pEnum->Release();
+        }
+
+        CoUninitialize();
+
+        std::vector<DWORD> pids;
+        EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+            if (IsWindowVisible(hwnd)) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(hwnd, &pid);
+                auto* vec = reinterpret_cast<std::vector<DWORD>*>(lParam);
+                if (std::find(vec->begin(), vec->end(), pid) == vec->end())
+                    vec->push_back(pid);
+            }
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&pids));
+
+        for (DWORD pid : pids) {
+            if (seenPIDs.find(pid) != seenPIDs.end()) continue;
+
+            DWORD sessionId = 0;
+            if (!ProcessIdToSessionId(pid, &sessionId) || sessionId != WTSGetActiveConsoleSessionId())
+                continue;
+
+            HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (!hProcess) continue;
+
+            wchar_t exePath[MAX_PATH] = {};
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameW(hProcess, 0, exePath, &size)) {
+                std::wstring ws(exePath);
+                size_t slash = ws.find_last_of(L"\\/");
+                std::wstring justName = (slash != std::wstring::npos) ? ws.substr(slash + 1) : ws;
+
+                std::string name = wideToUtf8(justName.c_str());
+                if (name.size() > 4 && name.substr(name.size() - 4) == ".exe")
+                    name = name.substr(0, name.size() - 4);
+
+                if (isValidName(name)) {
+                    storage.emplace_back(name);
+                    auto copy = std::make_unique<char[]>(name.size() + 1);
+                    strcpy(copy.get(), name.c_str());
+                    c_strs.push_back(copy.get());
+                    c_copies.push_back(std::move(copy));
+               }
+            }
+            CloseHandle(hProcess);
+        }
+
+        #else
+        std::unordered_set<std::string> added;
+
+        pa_mainloop* mainloop = pa_mainloop_new();
+        pa_mainloop_api* mainloop_api = pa_mainloop_get_api(mainloop);
+        pa_context* context = pa_context_new(mainloop_api, "GetAudioApps");
+
+        bool ready = false;
+        pa_context_set_state_callback(context, [](pa_context* ctx, void* userdata){
+            auto* r = reinterpret_cast<bool*>(userdata);
+            switch (pa_context_get_state(ctx)) {
+                case PA_CONTEXT_READY: *r = true; break;
+                case PA_CONTEXT_FAILED:
+                case PA_CONTEXT_TERMINATED: *r = true; break;
+                default: break;
+            }
+        }, &ready);
+
+        pa_context_connect(context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+        while (!ready) pa_mainloop_iterate(mainloop, 1, nullptr);
+
+        if (pa_context_get_state(context) == PA_CONTEXT_READY) {
+            pa_operation* op = pa_context_get_sink_input_info_list(
+                context,
+                [](pa_context*, const pa_sink_input_info* info, int eol, void* userdata) {
+                    if (eol) return;
+                    auto* added = reinterpret_cast<std::unordered_set<std::string>*>(userdata);
+
+                    if (info->proplist) {
+                        const char* proc_name = pa_proplist_gets(info->proplist, PA_PROP_APPLICATION_PROCESS_BINARY);
+                        if (!proc_name) proc_name = pa_proplist_gets(info->proplist, PA_PROP_APPLICATION_NAME);
+                        if (proc_name) {
+                            std::string name(proc_name);
+                            if (isValidName(name) && added->insert(name).second) {
+                                storage.emplace_back(name);
+                                c_strs.push_back(storage.back().c_str());
+                            }
+                        }
+                    }
+                }, &added);
+
+            if (op) {
+                while (pa_operation_get_state(op) == PA_OPERATION_RUNNING)
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+                pa_operation_unref(op);
+            }
+        }
+
+        pa_context_disconnect(context);
+        pa_context_unref(context);
+        pa_mainloop_free(mainloop);
+
+        uid_t myUid = getuid();
+        DIR* proc = opendir("/proc");
+        if (proc) {
+            struct dirent* entry;
+            while ((entry = readdir(proc)) != nullptr) {
+                if (!isdigit(entry->d_name[0])) continue;
+
+                std::string pidDir = std::string("/proc/") + entry->d_name;
+                std::ifstream status(pidDir + "/status");
+                if (!status.is_open()) continue;
+
+                std::string line;
+                uid_t uid = -1;
+                while (std::getline(status, line)) {
+                    if (line.rfind("Uid:", 0) == 0) {
+                        sscanf(line.c_str(), "Uid:\t%u", &uid);
+                        break;
+                    }
+                }
+                if (uid != myUid) continue;
+
+                std::ifstream comm(pidDir + "/comm");
+                if (!comm.is_open()) continue;
+
+                std::string name;
+                std::getline(comm, name);
+                if (isValidName(name) && added.insert(name).second) {
+                    storage.emplace_back(name);
+                    c_strs.push_back(storage.back().c_str());
+                }
+            }
+            closedir(proc);
+        }
+        #endif
+
+        clear_statics();
+        *len = c_strs.size();
+        return c_strs.data();
     }
 
     void play_sound(const char* wav_file, const char* device_name) {
@@ -387,9 +629,6 @@ extern "C" {
             CoUninitialize();
             return;
         }
-
-        std::cout << "Device mix format: " << " Channels:" << pwfx->nChannels << " Sample rate: " << pwfx->nSamplesPerSec << " Bits per sample: "
-            << pwfx->wBitsPerSample << "\n";
 
         const int srcChannels = wav.channels;
         const unsigned srcRate = static_cast<unsigned>(wav.sampleRate);
