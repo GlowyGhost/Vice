@@ -58,6 +58,7 @@ jobs:
             libglib2.0-dev \
             libwebkit2gtk-4.1-dev \
             libasound2-dev \
+            libpulse-dev \
             zip
 
       - name: Download Flutter build
