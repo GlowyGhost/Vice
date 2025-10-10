@@ -15,6 +15,7 @@ unsafe extern "C" {
     fn get_apps(len: *mut usize) -> *const *const c_char;
     fn play_sound(wav_file: *const c_char, device_name: *const c_char);
     fn device_to_device(input: *const c_char, output: *const c_char);
+    fn app_to_device(input: *const c_char, output: *const c_char);
 }
 
 pub(crate) fn outputs() -> Vec<String> {
@@ -85,8 +86,14 @@ fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&st
     unsafe {device_to_device(input, output)};
 }
 
-fn manage_app(_app_name: &str, _output_device_name: Option<&str>) {
-    return;
+fn manage_app(app_name: &str, output_device_name: Option<&str>) {
+    let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
+    let input_cstr = CString::new(app_name).unwrap();
+
+    let input: *const i8 = input_cstr.as_ptr();
+    let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
+
+    unsafe {app_to_device(input, output)};
 }
 
 pub(crate) fn start() {

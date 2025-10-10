@@ -239,7 +239,8 @@ extern "C" {
             return c_strs.data();
         }
 
-        UINT count; pDevices->GetCount(&count);
+        UINT count;
+        pDevices->GetCount(&count);
 
         for (UINT i = 0; i < count; i++) {
             IMMDevice* pDevice = nullptr;
@@ -1184,6 +1185,223 @@ extern "C" {
         if (captureHandle) snd_pcm_close(captureHandle);
         if (play_params) snd_pcm_hw_params_free(play_params);
         return;
+        #endif
+    }
+
+    void app_to_device(const char* input, const char* output) {
+        #ifdef _WIN32
+        CoInitialize(NULL);
+
+        // --- Find PID of target app ---
+        DWORD targetPid = 0;
+        PROCESSENTRY32W pe32{};
+        pe32.dwSize = sizeof(PROCESSENTRY32W);
+        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (Process32FirstW(hSnap, &pe32)) {
+            do {
+                std::string exe = wideToUtf8(pe32.szExeFile);
+                if (exe.size() > 4 && exe.substr(exe.size() - 4) == ".exe")
+                    exe = exe.substr(0, exe.size() - 4);
+                if (_stricmp(exe.c_str(), input) == 0) {
+                    targetPid = pe32.th32ProcessID;
+                    break;
+                }
+            } while (Process32NextW(hSnap, &pe32));
+        }
+        CloseHandle(hSnap);
+        if (targetPid == 0) {
+            std::cerr << "Process not found: " << input << "\n";
+            CoUninitialize();
+            return;
+        }
+
+        // --- Enumerate audio devices ---
+        IMMDeviceEnumerator* pEnum = nullptr;
+        CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                        __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+
+        // Select render device
+        IMMDevice* renderDevice = nullptr;
+        if (output && strlen(output) > 0) {
+            renderDevice = find_device_by_name(eRender, output); // implement this helper
+        }
+        if (!renderDevice) {
+            pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &renderDevice);
+        }
+        if (!renderDevice) {
+            std::cerr << "No render device found\n";
+            if (pEnum) pEnum->Release();
+            CoUninitialize();
+            return;
+        }
+
+        // --- Find the device that has sessions for our target PID ---
+        IMMDevice* captureDevice = nullptr;
+        IMMDeviceCollection* devicesAll = nullptr;
+        pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devicesAll);
+        UINT deviceCount = 0;
+        devicesAll->GetCount(&deviceCount);
+
+        for (UINT i = 0; i < deviceCount; ++i) {
+            IMMDevice* dev = nullptr;
+            if (FAILED(devicesAll->Item(i, &dev)) || !dev)
+                continue;
+
+            IAudioSessionManager2* mgr2 = nullptr;
+            if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2),
+                                    CLSCTX_ALL, nullptr, (void**)&mgr2)) || !mgr2) {
+                dev->Release();
+                continue;
+            }
+
+            IAudioSessionEnumerator* sessionEnum = nullptr;
+            if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) {
+                mgr2->Release();
+                dev->Release();
+                continue;
+            }
+
+            int sessionCount = 0;
+            sessionEnum->GetCount(&sessionCount);
+            bool found = false;
+
+            for (int s = 0; s < sessionCount; ++s) {
+                IAudioSessionControl* ctrl = nullptr;
+                if (FAILED(sessionEnum->GetSession(s, &ctrl)) || !ctrl)
+                    continue;
+
+                IAudioSessionControl2* ctrl2 = nullptr;
+                if (SUCCEEDED(ctrl->QueryInterface(__uuidof(IAudioSessionControl2),
+                                                (void**)&ctrl2)) && ctrl2) {
+                    DWORD pid = 0;
+                    ctrl2->GetProcessId(&pid);
+                    ctrl2->Release();
+                    if (pid == targetPid) {
+                        captureDevice = dev;
+                        captureDevice->AddRef();
+                        found = true;
+                        break;
+                    }
+                }
+                ctrl->Release();
+            }
+
+            sessionEnum->Release();
+            mgr2->Release();
+            dev->Release();
+
+            if (found) break;
+        }
+
+        devicesAll->Release();
+
+        if (!captureDevice) {
+            std::cerr << "Failed to find audio sessions for PID\n";
+            renderDevice->Release();
+            if (pEnum) pEnum->Release();
+            CoUninitialize();
+            return;
+        }
+
+        // --- Activate IAudioClient for capture and render ---
+        IAudioClient2* captureClient = nullptr;
+        captureDevice->Activate(__uuidof(IAudioClient2), CLSCTX_ALL, nullptr, (void**)&captureClient);
+
+        IAudioClient* renderClient = nullptr;
+        renderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&renderClient);
+
+        WAVEFORMATEX* wf = nullptr;
+        captureClient->GetMixFormat(&wf);
+
+        IAudioCaptureClient* pCaptureClient = nullptr;
+        IAudioRenderClient* pRenderClient = nullptr;
+
+        captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0, 0, wf, nullptr);
+        captureClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
+
+        renderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0, 0, wf, nullptr);
+        renderClient->GetService(__uuidof(IAudioRenderClient), (void**)&pRenderClient);
+
+        HANDLE hCaptureEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        HANDLE hRenderEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+        captureClient->SetEventHandle(hCaptureEvent);
+        renderClient->SetEventHandle(hRenderEvent);
+
+        UINT32 renderBufferFrames = 0;
+        renderClient->GetBufferSize(&renderBufferFrames);
+
+        captureClient->Start();
+        renderClient->Start();
+
+        const UINT32 bytesPerFrame = wf->nChannels * (wf->wBitsPerSample / 8);
+
+        // --- Event-driven loop ---
+        while (!stop_audio.load()) {
+            DWORD wait = WaitForSingleObject(hCaptureEvent, 2000);
+            if (wait == WAIT_TIMEOUT) continue;
+            if (wait != WAIT_OBJECT_0) break;
+
+            UINT32 packetFrames = 0;
+            if (FAILED(pCaptureClient->GetNextPacketSize(&packetFrames))) break;
+            if (packetFrames == 0) continue;
+
+            BYTE* pData = nullptr;
+            UINT32 numFrames = 0;
+            DWORD flags = 0;
+
+            if (FAILED(pCaptureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr)))
+                break;
+            if (numFrames == 0) {
+                pCaptureClient->ReleaseBuffer(0);
+                continue;
+            }
+
+            const BYTE* readPtr = pData;
+            UINT32 framesLeft = numFrames;
+
+            while (framesLeft > 0 && !stop_audio.load()) {
+                UINT32 padding = 0;
+                if (FAILED(renderClient->GetCurrentPadding(&padding))) { framesLeft = 0; break; }
+
+                UINT32 available = (renderBufferFrames > padding) ? (renderBufferFrames - padding) : 0;
+                if (available == 0) {
+                    DWORD w = WaitForSingleObject(hRenderEvent, 10);
+                    if (w == WAIT_TIMEOUT) continue;
+                    else if (w != WAIT_OBJECT_0) { framesLeft = 0; break; }
+                    else continue;
+                }
+
+                UINT32 toWrite = (framesLeft < available) ? framesLeft : available;
+                BYTE* renderPtr = nullptr;
+                if (FAILED(pRenderClient->GetBuffer(toWrite, &renderPtr))) { framesLeft = 0; break; }
+
+                memcpy(renderPtr, readPtr, (size_t)toWrite * bytesPerFrame);
+                if (FAILED(pRenderClient->ReleaseBuffer(toWrite, 0))) { framesLeft = 0; break; }
+
+                readPtr += (size_t)toWrite * bytesPerFrame;
+                framesLeft -= toWrite;
+            }
+
+            if (FAILED(pCaptureClient->ReleaseBuffer(numFrames))) break;
+        }
+
+        // --- Cleanup ---
+        captureClient->Stop();
+        renderClient->Stop();
+        CloseHandle(hCaptureEvent);
+        CloseHandle(hRenderEvent);
+        if (pRenderClient) pRenderClient->Release();
+        if (pCaptureClient) pCaptureClient->Release();
+        captureClient->Release();
+        renderClient->Release();
+        captureDevice->Release();
+        renderDevice->Release();
+        if (pEnum) pEnum->Release();
+        CoTaskMemFree(wf);
+        CoUninitialize();
+        #else
+        std::cerr << "app_to_device(): per-app capture only implemented on Windows\n";
         #endif
     }
 }
