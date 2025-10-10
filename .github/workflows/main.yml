@@ -12,7 +12,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.35.2"
+          flutter-version: "3.35.6"
           channel: "stable"
 
       - run: |
@@ -81,21 +81,19 @@ jobs:
           cd src-tauri
           cargo build --release
 
-          mv macos.zip ../../
-
       - name: Package Release Zip (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           cd src-tauri/target/release
-          zip -j linux.zip Luauncher ../../../LICENSE
+          zip -j linux.zip Vice ../../../LICENSE
 
       - name: Package Release Zip (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           cd src-tauri/target/release
-          Compress-Archive -Path Luauncher.exe,../../../LICENSE -DestinationPath windows.zip -Force
+          Compress-Archive -Path Vice.exe,../../../LICENSE -DestinationPath windows.zip -Force
 
       - name: Upload final zip
         uses: actions/upload-artifact@v4
