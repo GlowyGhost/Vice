@@ -57,6 +57,7 @@ jobs:
             libayatana-appindicator3-dev \
             libglib2.0-dev \
             libwebkit2gtk-4.1-dev \
+            libasound2-dev \
             zip
 
       - name: Download Flutter build
