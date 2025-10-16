@@ -1,16 +1,15 @@
-use std::thread;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,};
 
 mod files;
 mod funcs;
 mod audio;
 
-pub fn create_or_show_window(app: &AppHandle) {
+pub fn create_or_show_window(app: &AppHandle, hide_window: bool) {
     if let Some(window) = app.get_webview_window("Vice") {
         window.show().unwrap();
         window.set_focus().unwrap();
     } else {
-        WebviewWindowBuilder::new(
+        let window: tauri::WebviewWindow = WebviewWindowBuilder::new(
             app,
             "Vice",
             WebviewUrl::App("index.html".into()),
@@ -19,15 +18,19 @@ pub fn create_or_show_window(app: &AppHandle) {
         .inner_size(800.0, 600.0)
         .build()
         .unwrap();
+
+        if hide_window {
+            window.hide().unwrap();
+        }
     }
 }
 
-pub fn create_window() {
+pub fn create_window(hide_window: bool) {
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             files::create_files();
 
-            create_or_show_window(&app.handle());
+            create_or_show_window(&app.handle(), hide_window);
 
             Ok(())
         })
@@ -56,7 +59,7 @@ pub fn create_window() {
             }
         })
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            create_or_show_window(&app.app_handle());
+            create_or_show_window(&app.app_handle(), false);
         }))
         .run(tauri::generate_context!())
         .expect("error while running tauri app");
@@ -66,11 +69,6 @@ pub fn run() {
     audio::start();
 
     let args: Vec<String> = std::env::args().collect();
-    if !args.contains(&"--background".to_string()) {
-        create_window();
-    } else {
-        loop {
-            thread::sleep(std::time::Duration::from_secs(60));
-        }
-    }
+    let hide_window: bool = args.contains(&"--background".to_string());
+    create_window(hide_window);
 }

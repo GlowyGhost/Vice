@@ -51,7 +51,7 @@ pub(crate) fn inputs() -> Vec<String> {
 pub(crate) fn play_sfx(file_path: &str) {
     let c_device = match files::get_output() {
         Some(output) => Some(CString::new(output).unwrap()),
-        None => None, // nullptr => default device
+        None => None,
     };
 
     let device: *const c_char = c_device
@@ -97,6 +97,16 @@ fn manage_app(app_name: &str, output_device_name: Option<&str>) {
 }
 
 pub(crate) fn start() {
+    if unsafe {stop_audio.load(Ordering::SeqCst) == false} {
+        println!("Audio threads already running");
+        println!("Please restart audio threads instead.");
+        return;
+    }
+
+    unsafe {
+        stop_audio.store(false, Ordering::SeqCst);
+    }
+
     if let Some(channels) = files::get_channels() {
         for channel in channels {
             thread::Builder::new()
@@ -119,9 +129,18 @@ pub(crate) fn start() {
 }
 
 pub(crate) fn restart() {
-    println!("Restarting audio threads");
+    thread::Builder::new()
+        .name("audio_restart".to_string())
+        .spawn(|| {
+            println!("Restarting audio threads");
 
-    unsafe {stop_audio.store(true, Ordering::SeqCst);}
+            unsafe {
+                stop_audio.store(true, Ordering::SeqCst);
+            }
 
-    start();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            
+            start();
+        })
+        .expect("Failed to spawn audio restart thread");
 }
