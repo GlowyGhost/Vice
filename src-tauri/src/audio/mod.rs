@@ -13,9 +13,9 @@ unsafe extern "C" {
     fn get_outputs(len: *mut usize) -> *const *const c_char;
     fn get_inputs(len: *mut usize) -> *const *const c_char;
     fn get_apps(len: *mut usize) -> *const *const c_char;
-    fn play_sound(wav_file: *const c_char, device_name: *const c_char);
-    fn device_to_device(input: *const c_char, output: *const c_char);
-    fn app_to_device(input: *const c_char, output: *const c_char);
+    fn play_sound(wav_file: *const c_char, device_name: *const c_char, low_latency: bool);
+    fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool);
+    fn app_to_device(input: *const c_char, output: *const c_char, low_latency: bool);
 }
 
 pub(crate) fn outputs() -> Vec<String> {
@@ -48,7 +48,7 @@ pub(crate) fn inputs() -> Vec<String> {
     }
 }
 
-pub(crate) fn play_sfx(file_path: &str) {
+pub(crate) fn play_sfx(file_path: &str, low_latency: bool) {
     let c_device = match files::get_output() {
         Some(output) => Some(CString::new(output).unwrap()),
         None => None,
@@ -58,7 +58,7 @@ pub(crate) fn play_sfx(file_path: &str) {
         .as_ref()
         .map_or(std::ptr::null(), |s| s.as_ptr());
 
-    unsafe {play_sound(CString::new(file_path).unwrap().as_ptr(), device);}
+    unsafe {play_sound(CString::new(file_path).unwrap().as_ptr(), device, low_latency);}
 }
 
 pub(crate) fn apps() -> Vec<String> {
@@ -76,24 +76,24 @@ pub(crate) fn apps() -> Vec<String> {
     }
 }
 
-fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>) {
+fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>, low_latency: bool) {
     let input_cstr = input_device_name.map(|device| CString::new(device).unwrap());
     let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
 
     let input: *const i8 = input_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
 
-    unsafe {device_to_device(input, output)};
+    unsafe {device_to_device(input, output, low_latency)};
 }
 
-fn manage_app(app_name: &str, output_device_name: Option<&str>) {
+fn manage_app(app_name: &str, output_device_name: Option<&str>, low_latency: bool) {
     let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
     let input_cstr = CString::new(app_name).unwrap();
 
     let input: *const i8 = input_cstr.as_ptr();
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
 
-    unsafe {app_to_device(input, output)};
+    unsafe {app_to_device(input, output, low_latency)};
 }
 
 pub(crate) fn start() {
@@ -113,9 +113,9 @@ pub(crate) fn start() {
                 .name(channel.name.clone())
                 .spawn(move || {
                     if channel.deviceorapp {
-                        manage_device(Some(&channel.device), files::get_output().as_deref());
+                        manage_device(Some(&channel.device), files::get_output().as_deref(), channel.lowlatency);
                     } else {
-                        manage_app(&channel.device, files::get_output().as_deref());
+                        manage_app(&channel.device, files::get_output().as_deref(), channel.lowlatency);
                     }
                 })
                 .expect(&format!("Failed to spawn channel thread"));

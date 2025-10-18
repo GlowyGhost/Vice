@@ -20,6 +20,7 @@ class _ChannelsNewState extends State<ChannelsNew> {
   String selectedDeviceApp = "Select audio device";
   String deviceOrApp = "Select audio device";
   bool device = true;
+  bool lowlatency = false;
   final TextEditingController controllerName = TextEditingController();
   
   @override
@@ -47,7 +48,8 @@ class _ChannelsNewState extends State<ChannelsNew> {
       "icon": icon,
       "name": controllerName.text,
       "deviceapps": selectedDeviceApp,
-      "device": device});
+      "device": device,
+      "low": lowlatency});
 
     ChannelsPageClass.setPage(ChannelsMain());
   }
@@ -187,6 +189,16 @@ class _ChannelsNewState extends State<ChannelsNew> {
                 child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: Colors.white))
               )
             ),
+
+            const SizedBox(height: 20),
+
+            SwitchListTile(
+							title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+							value: lowlatency,
+							onChanged: (value) {
+								setState(() => lowlatency = value);
+							},
+						),
           ],
         ),
       ),

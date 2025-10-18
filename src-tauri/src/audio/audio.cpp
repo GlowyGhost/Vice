@@ -1,3 +1,4 @@
+#pragma region Includes
 #include <vector>
 #include <string>
 #include <thread>
@@ -6,8 +7,11 @@
 #include <iostream>
 #include <cctype>
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <functiondiscoverykeys_devpkey.h>
@@ -23,11 +27,13 @@
 #include <fstream>
 #include <pulse/pulseaudio.h>
 #endif
+#pragma endregion
 
 static std::vector<std::string> storage;
 static std::vector<const char*> c_strs;
 static std::vector<std::unique_ptr<char[]>> c_copies;
 
+#pragma region Helpers
 std::string wideToUtf8(const wchar_t* wstr) {
     if (!wstr) return {};
 
@@ -40,111 +46,90 @@ std::string wideToUtf8(const wchar_t* wstr) {
 }
 
 struct WAVData {
-    std::vector<char> buffer;
-    int sampleRate;
-    int channels;
+    char* buffer = nullptr;
+    size_t bufferSize = 0;
+    int sampleRate = 0;
+    int channels = 0;
 };
 
 WAVData loadWav(const char* filename) {
     std::ifstream f(filename, std::ios::binary);
-    WAVData data;
-    if (!f) return data;
+    WAVData wav;
+    if (!f) return wav;
 
-    char riff[4];
-    f.read(riff, 4);
-    if (std::strncmp(riff, "RIFF", 4) != 0) return data;
-
+    char riff[4]; f.read(riff, 4);
+    if (std::strncmp(riff, "RIFF", 4) != 0) return wav;
     f.seekg(4, std::ios::cur);
-
-    char wave[4];
-    f.read(wave, 4);
-    if (std::strncmp(wave, "WAVE", 4) != 0) return data;
+    char wave[4]; f.read(wave, 4);
+    if (std::strncmp(wave, "WAVE", 4) != 0) return wav;
 
     while (f) {
-        char chunkId[4];
-        uint32_t chunkSize = 0;
+        char chunkId[4]; uint32_t chunkSize = 0;
         f.read(chunkId, 4);
         f.read(reinterpret_cast<char*>(&chunkSize), 4);
         if (!f) break;
 
         if (std::strncmp(chunkId, "fmt ", 4) == 0) {
-            uint16_t audioFormat;
-            uint16_t channels;
-            uint32_t sampleRate;
-            uint32_t byteRate;
-            uint16_t blockAlign;
-            uint16_t bitsPerSample;
-
+            uint16_t audioFormat, channels, blockAlign, bitsPerSample;
+            uint32_t sampleRate, byteRate;
             f.read(reinterpret_cast<char*>(&audioFormat), 2);
             f.read(reinterpret_cast<char*>(&channels), 2);
             f.read(reinterpret_cast<char*>(&sampleRate), 4);
             f.read(reinterpret_cast<char*>(&byteRate), 4);
             f.read(reinterpret_cast<char*>(&blockAlign), 2);
             f.read(reinterpret_cast<char*>(&bitsPerSample), 2);
-
-            if (chunkSize > 16)
-                f.seekg(chunkSize - 16, std::ios::cur);
-
-            data.channels = channels;
-            data.sampleRate = sampleRate;
+            if (chunkSize > 16) f.seekg(chunkSize - 16, std::ios::cur);
+            wav.channels = channels;
+            wav.sampleRate = sampleRate;
         } else if (std::strncmp(chunkId, "data", 4) == 0) {
-            data.buffer.resize(chunkSize);
-            f.read(data.buffer.data(), chunkSize);
-            break; 
-        } else
-            f.seekg(chunkSize, std::ios::cur);
+            wav.bufferSize = chunkSize;
+            wav.buffer = new char[chunkSize];
+            f.read(wav.buffer, chunkSize);
+            break;
+        } else f.seekg(chunkSize, std::ios::cur);
     }
-
-    return data;
+    return wav;
 }
 
 #ifdef _WIN32
-static bool is_format_float(const WAVEFORMATEX* wf) {
-    if (!wf) return false;
-    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) return true;
-    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-        const WAVEFORMATEXTENSIBLE* ext = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(wf);
-        return (IsEqualGUID(ext->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != 0);
+float* int16_to_float(const int16_t* data, size_t frames, int channels) {
+    float* out = new float[frames * channels];
+    for (size_t i = 0; i < frames * channels; ++i)
+        out[i] = data[i] / 32768.f;
+    return out;
+}
+
+float* linear_resample_interleaved(const float* src, size_t srcFrames, int channels, int srcRate, int dstRate, size_t* outFrames) {
+    *outFrames = srcFrames * dstRate / srcRate;
+    float* out = new float[*outFrames * channels];
+    for (size_t i = 0; i < *outFrames; ++i) {
+        float srcPos = i * float(srcFrames) / (*outFrames);
+        size_t idx = size_t(srcPos);
+        float frac = srcPos - idx;
+        for (int c = 0; c < channels; ++c) {
+            float s0 = (idx < srcFrames) ? src[idx * channels + c] : 0.f;
+            float s1 = (idx + 1 < srcFrames) ? src[(idx + 1) * channels + c] : 0.f;
+            out[i * channels + c] = s0 * (1 - frac) + s1 * frac;
+        }
     }
-    return false;
+    return out;
+}
+
+// Simple channel remap (repeat / drop)
+float* remap_channels_interleaved(const float* src, size_t frames, int srcCh, int dstCh) {
+    float* out = new float[frames * dstCh];
+    for (size_t f = 0; f < frames; ++f) {
+        for (int c = 0; c < dstCh; ++c) {
+            out[f * dstCh + c] = src[f * srcCh + (c % srcCh)];
+        }
+    }
+    return out;
+}
+
+bool is_format_float(WAVEFORMATEX* wf) {
+    return wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
 }
 #endif
-
-static std::vector<float> linear_resample_interleaved(const float* in, size_t inFrames, int inCh, unsigned inRate, unsigned outRate) {
-    if (inRate == outRate) {
-        return std::vector<float>(in, in + inFrames * inCh);
-    }
-    double ratio = (double)outRate / (double)inRate;
-    size_t outFrames = (size_t)std::ceil(inFrames * ratio);
-    std::vector<float> out(outFrames * inCh);
-
-    for (size_t f = 0; f < outFrames; ++f) {
-        double srcPos = f / ratio;
-        size_t idx = (size_t)std::floor(srcPos);
-        double frac = srcPos - idx;
-
-        for (int ch = 0; ch < inCh; ++ch) {
-            float s0 = 0.0f, s1 = 0.0f;
-            if (idx < inFrames) s0 = in[(idx * inCh) + ch];
-            if (idx + 1 < inFrames) s1 = in[((idx + 1) * inCh) + ch];
-            out[f * inCh + ch] = static_cast<float>(s0 + (s1 - s0) * frac);
-        }
-    }
-    return out;
-}
-
-static std::vector<float> remap_channels_interleaved(const float* in, size_t frames, int inCh, int outCh) {
-    if (inCh == outCh)
-        return std::vector<float>(in, in + frames * inCh);
-    std::vector<float> out(frames * outCh);
-    for (size_t f = 0; f < frames; ++f) {
-        for (int c = 0; c < outCh; ++c) {
-            int src = (inCh == 1) ? 0 : (c % inCh);
-            out[f * outCh + c] = in[f * inCh + src];
-        }
-    }
-    return out;
-}
 
 #ifdef _WIN32
 IMMDevice* find_device_by_name(EDataFlow flow, const char* name) {
@@ -236,10 +221,12 @@ void clear_statics() {
         c_copies.clear();
     }).detach();
 }
+#pragma endregion
 
 extern "C" {
     std::atomic<bool> stop_audio(true);
 
+    #pragma region Get Ouputs
     const char** get_outputs(size_t* len) {
         *len = 0;
 
@@ -304,7 +291,8 @@ extern "C" {
         *len = c_strs.size();
         return c_strs.data();
     }
-
+    #pragma endregion
+    #pragma region Get Inputs
     const char** get_inputs(size_t* len) {
         *len = 0;
 
@@ -368,7 +356,8 @@ extern "C" {
         *len = c_strs.size();
         return c_strs.data();
     }
-
+    #pragma endregion
+    #pragma region Get Apps
     const char** get_apps(size_t* len) {
         *len = 0;
 
@@ -572,207 +561,114 @@ extern "C" {
         *len = c_strs.size();
         return c_strs.data();
     }
-
-    void play_sound(const char* wav_file, const char* device_name) {
-        WAVData wav = loadWav(wav_file);
-        if (wav.buffer.empty() || wav.channels <= 0) {
-            std::cout << "Aborted sound effect " << wav_file << ": " << (wav.buffer.empty() ? "Buffer empty" : "Invalid channels") << "\n";
-            return;
-        }
-
+    #pragma endregion
+    #pragma region Play Sound
+    void play_sound(const char* wav_file, const char* device_name, bool low_latency) {
         #ifdef _WIN32
-        CoInitialize(NULL);
-
-        IMMDeviceEnumerator* pEnumerator = nullptr;
-        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator)))) {
-            CoUninitialize();
+        WAVData wav = loadWav(wav_file);
+        if (!wav.buffer || wav.channels <= 0) {
+            std::cerr << "Failed to load WAV: " << wav_file << "\n";
             return;
         }
 
-        IMMDeviceCollection* pDevices = nullptr;
-        if (FAILED(pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices))) {
-            pEnumerator->Release();
-            CoUninitialize();
-            return;
+        CoInitialize(nullptr);
+
+        IMMDeviceEnumerator* pEnum = nullptr;
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum)))) {
+            CoUninitialize(); return;
         }
 
-        UINT count = 0;
-        pDevices->GetCount(&count);
         IMMDevice* targetDevice = nullptr;
-
-        for (UINT i = 0; i < count; i++) {
-            IMMDevice* pDevice = nullptr;
-            if (SUCCEEDED(pDevices->Item(i, &pDevice))) {
-                IPropertyStore* pProps = nullptr;
-                if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) {
-                    PROPVARIANT varName;
-                    PropVariantInit(&varName);
-                    if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
-                        if (device_name && std::string(wideToUtf8(varName.pwszVal)) == std::string(device_name)) {
-                            targetDevice = pDevice;
-                        }
-                        PropVariantClear(&varName);
-                    }
-                    pProps->Release();
-                }
-                if (!targetDevice) pDevice->Release();
-            }
-        }
-
-        if (!targetDevice) {
-            pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &targetDevice);
-        }
-
-        pDevices->Release();
-        pEnumerator->Release();
-
-        if (!targetDevice) {
-            std::cout << "No audio device found\n";
-            CoUninitialize();
-            return;
-        }
+        pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &targetDevice);
+        if (!targetDevice) { pEnum->Release(); CoUninitialize(); return; }
 
         IAudioClient* audioClient = nullptr;
-        if (FAILED(targetDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&audioClient))) {
-            targetDevice->Release();
-            CoUninitialize();
-            return;
+        if (FAILED(targetDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&audioClient))) {
+            targetDevice->Release(); CoUninitialize(); return;
         }
 
         WAVEFORMATEX* pwfx = nullptr;
-        HRESULT hr = audioClient->GetMixFormat(&pwfx);
-        if (FAILED(hr) || !pwfx) {
-            std::cout << "GetMixFormat failed\n";
-            audioClient->Release();
-            targetDevice->Release();
-            CoUninitialize();
-            return;
+        if (FAILED(audioClient->GetMixFormat(&pwfx)) || !pwfx) {
+            audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
         }
 
-        const int srcChannels = wav.channels;
-        const unsigned srcRate = static_cast<unsigned>(wav.sampleRate);
-        const size_t srcFrames = wav.buffer.size() / (srcChannels * sizeof(int16_t));
-        std::vector<float> srcFloat;
-        srcFloat.resize(srcFrames * srcChannels);
-        const int16_t* src16 = reinterpret_cast<const int16_t*>(wav.buffer.data());
-        for (size_t f = 0; f < srcFrames; ++f) {
-            for (int c = 0; c < srcChannels; ++c) {
-                int16_t s = src16[f * srcChannels + c];
-                srcFloat[f * srcChannels + c] = s / 32768.0f;
+        unsigned dstRate = pwfx->nSamplesPerSec;
+        int dstCh = pwfx->nChannels;
+
+        size_t srcFrames = wav.bufferSize / (wav.channels * sizeof(int16_t));
+        float* srcFloat = int16_to_float(reinterpret_cast<int16_t*>(wav.buffer), srcFrames, wav.channels);
+
+        size_t resampledFrames = 0;
+        float* resampled = linear_resample_interleaved(srcFloat, srcFrames, wav.channels, wav.sampleRate, dstRate, &resampledFrames);
+        delete[] srcFloat;
+
+        float* remapped = remap_channels_interleaved(resampled, resampledFrames, wav.channels, dstCh);
+        delete[] resampled;
+
+        size_t bytesPerSample = pwfx->wBitsPerSample / 8;
+        size_t bytesPerFrame = dstCh * bytesPerSample;
+        size_t totalBytes = resampledFrames * bytesPerFrame;
+
+        char* outBuffer = new char[totalBytes];
+        if (is_format_float(pwfx) && pwfx->wBitsPerSample == 32) {
+            memcpy(outBuffer, remapped, totalBytes);
+        } else if (!is_format_float(pwfx) && pwfx->wBitsPerSample == 16) {
+            int16_t* p16 = reinterpret_cast<int16_t*>(outBuffer);
+            for (size_t i = 0; i < resampledFrames * dstCh; ++i) {
+                float v = std::clamp(remapped[i], -1.f, 1.f);
+                p16[i] = static_cast<int16_t>(v * 32767.f);
             }
         }
+        delete[] remapped;
 
-        const unsigned dstRate = static_cast<unsigned>(pwfx->nSamplesPerSec);
-        std::vector<float> resampled = linear_resample_interleaved(srcFloat.data(), srcFrames, srcChannels, srcRate, dstRate);
-        const size_t dstFramesAfterResample = resampled.size() / srcChannels;
-
-        const int dstChannels = pwfx->nChannels;
-        std::vector<float> remapped = remap_channels_interleaved(resampled.data(), dstFramesAfterResample, srcChannels, dstChannels);
-        const size_t finalFrames = remapped.size() / dstChannels;
-
-        bool deviceIsFloat = is_format_float(pwfx);
-        size_t bytesPerSample = (pwfx->wBitsPerSample / 8);
-        size_t bytesPerFrame = dstChannels * bytesPerSample;
-        std::vector<char> outBuffer;
-        outBuffer.resize(finalFrames * bytesPerFrame);
-
-        if (deviceIsFloat && pwfx->wBitsPerSample == 32) {
-            float* outF = reinterpret_cast<float*>(outBuffer.data());
-            for (size_t i = 0; i < finalFrames * dstChannels; ++i) outF[i] = remapped[i];
-        } else if (!deviceIsFloat && pwfx->wBitsPerSample == 16) {
-            int16_t* out16 = reinterpret_cast<int16_t*>(outBuffer.data());
-            for (size_t i = 0; i < finalFrames * dstChannels; ++i) {
-                float v = remapped[i];
-                if (v > 1.0f) v = 1.0f;
-                if (v < -1.0f) v = -1.0f;
-                out16[i] = static_cast<int16_t>(v * 32767.0f);
-            }
-        } else {
-            if (pwfx->wBitsPerSample == 32 && !deviceIsFloat) {
-                int32_t* out32 = reinterpret_cast<int32_t*>(outBuffer.data());
-                for (size_t i = 0; i < finalFrames * dstChannels; ++i) {
-                    float v = remapped[i];
-                    if (v > 1.0f) v = 1.0f;
-                    if (v < -1.0f) v = -1.0f;
-                    out32[i] = static_cast<int32_t>(v * 2147483647.0f);
-                }
-            } else {
-                std::cerr << "Unsupported device sample format. Bits/sample = " << pwfx->wBitsPerSample << ", float? " << deviceIsFloat << "\n";
-                CoTaskMemFree(pwfx);
-                audioClient->Release();
-                targetDevice->Release();
-                CoUninitialize();
-                return;
-            }
+        REFERENCE_TIME bufferDuration = low_latency ? 100000 : 500000;
+        if (FAILED(audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, bufferDuration, 0, pwfx, nullptr))) {
+            delete[] outBuffer; CoTaskMemFree(pwfx); audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
         }
-
-        hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 0, 0, pwfx, NULL);
-        if (FAILED(hr)) {
-            std::cout << "Initialize failed: 0x" << std::hex << hr << "\n";
-            CoTaskMemFree(pwfx);
-            audioClient->Release();
-            targetDevice->Release();
-            CoUninitialize();
-            return;
-        }
-
         CoTaskMemFree(pwfx);
 
         IAudioRenderClient* renderClient = nullptr;
         if (FAILED(audioClient->GetService(__uuidof(IAudioRenderClient), (void**)&renderClient))) {
-            audioClient->Release();
-            targetDevice->Release();
-            CoUninitialize();
-            return;
+            delete[] outBuffer; audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
         }
 
         UINT32 bufferFrameCount = 0;
         audioClient->GetBufferSize(&bufferFrameCount);
-
-        hr = audioClient->Start();
-        if (FAILED(hr)) {
-            std::cout << "Start failed: 0x" << std::hex << hr << "\n";
-            renderClient->Release();
-            audioClient->Release();
-            targetDevice->Release();
-            CoUninitialize();
-            return;
+        if (FAILED(audioClient->Start())) {
+            delete[] outBuffer; renderClient->Release(); audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
         }
 
-        std::thread([renderClient, audioClient, outBuffer = std::move(outBuffer), bytesPerFrame, bufferFrameCount]() mutable {
-            uint32_t offset = 0;
-            BYTE* pData = nullptr;
-            size_t totalBytes = outBuffer.size();
-
+        std::thread([renderClient, audioClient, outBuffer, totalBytes, bytesPerFrame, bufferFrameCount]() mutable {
+            size_t offset = 0;
             while (offset < totalBytes && !stop_audio.load()) {
                 UINT32 padding = 0;
                 if (FAILED(audioClient->GetCurrentPadding(&padding))) break;
 
                 UINT32 framesAvailable = bufferFrameCount - padding;
-                if (framesAvailable == 0) {
-                    Sleep(1);
-                    continue;
-                }
+                if (framesAvailable == 0) { Sleep(1); continue; }
 
                 UINT32 bytesAvailable = framesAvailable * bytesPerFrame;
                 UINT32 bytesLeft = static_cast<UINT32>(totalBytes - offset);
-                UINT32 bytesToWrite = (bytesAvailable < bytesLeft) ? bytesAvailable : bytesLeft;
+                UINT32 bytesToWrite = std::min(bytesAvailable, bytesLeft);
                 UINT32 framesToWrite = bytesToWrite / bytesPerFrame;
                 if (framesToWrite == 0) break;
 
+                BYTE* pData = nullptr;
                 if (FAILED(renderClient->GetBuffer(framesToWrite, &pData))) break;
-
-                memcpy(pData, outBuffer.data() + offset, framesToWrite * bytesPerFrame);
+                memcpy(pData, outBuffer + offset, framesToWrite * bytesPerFrame);
                 offset += framesToWrite * bytesPerFrame;
-
                 renderClient->ReleaseBuffer(framesToWrite, 0);
             }
 
             audioClient->Stop();
             renderClient->Release();
             audioClient->Release();
+            delete[] outBuffer;
         }).detach();
+
         targetDevice->Release();
+        pEnum->Release();
+        delete[] wav.buffer;
         #else
         snd_pcm_t* handle;
         const char* alsa_device = (device_name && strlen(device_name) > 0) ? device_name : "default";
@@ -818,8 +714,9 @@ extern "C" {
         }).detach();
         #endif
     }
-
-    void device_to_device(const char* input, const char* output) {
+    #pragma endregion
+    #pragma region Device to Device Pipe
+    void device_to_device(const char* input, const char* output, bool low_latency) {
         #ifdef _WIN32
         HRESULT hr = S_OK;
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -1203,8 +1100,9 @@ extern "C" {
         return;
         #endif
     }
-
-    void app_to_device(const char* input, const char* output) {
+    #pragma endregion
+    #pragma region App to Device Pipe
+    void app_to_device(const char* input, const char* output, bool low_latency) {
         #ifdef _WIN32
         CoInitialize(nullptr);
 

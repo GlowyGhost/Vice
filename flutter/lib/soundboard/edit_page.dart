@@ -10,6 +10,7 @@ class SoundboardEdit extends StatefulWidget {
   final String icon;
   final List<int> color;
   final String sound;
+  final bool lowlatency;
 
   const SoundboardEdit({
     super.key,
@@ -17,6 +18,7 @@ class SoundboardEdit extends StatefulWidget {
     required this.icon,
     required this.sound,
     required this.color,
+    required this.lowlatency,
   });
 
   @override
@@ -29,6 +31,7 @@ class _SoundboardEditState extends State<SoundboardEdit> {
   String icon = "question_mark";
   final TextEditingController controllerName = TextEditingController();
   final TextEditingController controllerSound = TextEditingController();
+  bool lowlatency = false;
   
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _SoundboardEditState extends State<SoundboardEdit> {
     pickerColor = Color.fromARGB(255, widget.color[0], widget.color[1], widget.color[2]);
     currentColor = Color.fromARGB(255, widget.color[0], widget.color[1], widget.color[2]);
     controllerName.text = widget.name;
+    lowlatency = widget.lowlatency;
   }
 
   void changeColor(Color color) {
@@ -51,8 +55,10 @@ class _SoundboardEditState extends State<SoundboardEdit> {
       "icon": icon,
       "name": controllerName.text,
       "sound": controllerSound.text,
-      "oldname": widget.name});
-    
+      "oldname": widget.name,
+      "low": lowlatency
+    });
+
     SoundboardPageClass.setPage(SoundboardMain());
   }
 
@@ -187,6 +193,16 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 20),
+
+            SwitchListTile(
+							title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+							value: lowlatency,
+							onChanged: (value) {
+								setState(() => lowlatency = value);
+							},
+						),
           ],
         ),
       ),

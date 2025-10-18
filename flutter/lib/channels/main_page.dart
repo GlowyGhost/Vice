@@ -18,8 +18,9 @@ class ChannelsClass {
 	ChannelsColor color;
   String device;
   bool deviceOrApp;
+  bool lowlatency;
 
-  ChannelsClass(this.name, this.icon, this.color, this.device, this.deviceOrApp);
+  ChannelsClass(this.name, this.icon, this.color, this.device, this.deviceOrApp, this.lowlatency);
 }
 
 class ChannelsMain extends StatefulWidget {
@@ -58,7 +59,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
     List<ChannelsClass> convertedChannels = [];
 
     for (final SFXsChannels channel in channels) {
-      convertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!, channel.deviceOrApp!));
+      convertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!, channel.deviceOrApp!, channel.lowlatency!));
     }
     
     setState(() {
@@ -211,7 +212,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
                                   child: Padding(
                                     padding: EdgeInsets.all(12),
                                     child: IconButton(
-                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], deviceApp: channel.device, deviceBool: channel.deviceOrApp,))},
+                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], deviceApp: channel.device, deviceBool: channel.deviceOrApp, lowlatency: channel.lowlatency))},
                                       icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
                                     )
                                   ),

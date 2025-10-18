@@ -11,7 +11,9 @@ pub(crate) struct SoundboardSFX {
     pub(crate) name: String,
     pub(crate) icon: String,
     pub(crate) color: [u8; 3],
-    pub(crate) sound: String
+    pub(crate) sound: String,
+    #[serde(default)]
+    pub(crate) lowlatency: bool
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -20,7 +22,9 @@ pub(crate) struct Channel {
     pub(crate) icon: String,
     pub(crate) color: [u8; 3],
     pub(crate) device: String,
-    pub(crate) deviceorapp: bool
+    pub(crate) deviceorapp: bool,
+    #[serde(default)]
+    pub(crate) lowlatency: bool,
 }
 
 #[derive(Deserialize, Serialize)]

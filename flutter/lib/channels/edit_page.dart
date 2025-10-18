@@ -11,6 +11,7 @@ class ChannelsEdit extends StatefulWidget {
   final List<int> color;
   final String deviceApp;
   final bool deviceBool;
+  final bool lowlatency;
 
   const ChannelsEdit({
     super.key,
@@ -19,6 +20,7 @@ class ChannelsEdit extends StatefulWidget {
     required this.deviceApp,
     required this.color,
     required this.deviceBool,
+    required this.lowlatency,
   });
 
   @override
@@ -33,6 +35,7 @@ class _ChannelsEditState extends State<ChannelsEdit> {
   String selectedDeviceApp = "Select audio device";
   String deviceOrApp = "Select audio device";
   bool device = true;
+  bool lowlatency = false;
   final TextEditingController controllerName = TextEditingController();
   
   @override
@@ -49,6 +52,7 @@ class _ChannelsEditState extends State<ChannelsEdit> {
     currentColor = Color.fromARGB(255, widget.color[0], widget.color[1], widget.color[2]);
     controllerName.text = widget.name;
     device = widget.deviceBool;
+    lowlatency = widget.lowlatency;
 
     getDeviceApp();
   }
@@ -72,6 +76,7 @@ class _ChannelsEditState extends State<ChannelsEdit> {
       "name": controllerName.text,
       "deviceapps": selectedDeviceApp,
       "device": device,
+      "low": lowlatency,
       "oldname": widget.name});
 
     ChannelsPageClass.setPage(ChannelsMain());
@@ -218,6 +223,16 @@ class _ChannelsEditState extends State<ChannelsEdit> {
                 child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: Colors.white))
               )
             ),
+
+            const SizedBox(height: 20),
+
+            SwitchListTile(
+							title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+							value: lowlatency,
+							onChanged: (value) {
+								setState(() => lowlatency = value);
+							},
+						),
           ],
         ),
       ),

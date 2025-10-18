@@ -28,7 +28,8 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
             map.containsKey("icon") ||
             map.containsKey("sound") ||
             map.containsKey("device") ||
-            map.containsKey("color")) {
+            map.containsKey("color") ||
+            map.containsKey("lowlatency")) {
           return SFXsChannels.fromMap(map);
         }
 
@@ -82,6 +83,7 @@ class SFXsChannels {
   final String? device;
   final List<int>? color;
   final bool? deviceOrApp;
+  final bool? lowlatency;
 
   SFXsChannels({
     this.name,
@@ -90,6 +92,7 @@ class SFXsChannels {
     this.device,
     this.color,
     this.deviceOrApp,
+    this.lowlatency,
   });
 
   factory SFXsChannels.fromMap(Map<String, dynamic> map) {
@@ -105,6 +108,7 @@ class SFXsChannels {
       device: map["device"],
       color: parsedColor,
       deviceOrApp: map["deviceorapp"],
+      lowlatency: map["lowlatency"],
     );
   }
 }

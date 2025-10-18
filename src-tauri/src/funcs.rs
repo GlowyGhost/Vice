@@ -12,11 +12,11 @@ pub(crate) fn get_channels() -> Option<Vec<Channel>> {
 }
 
 #[tauri::command]
-pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool) -> Result<(), String> {
+pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, low: bool) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
-            let channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device};
+            let channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low};
             let mut channels = set.channels;
 
             channels.push(channel);
@@ -26,11 +26,11 @@ pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps
 }
 
 #[tauri::command]
-pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: String) -> Result<(), String> {
+pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: String, low: bool) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
-            let sfx = SoundboardSFX{name, icon, color, sound};
+            let sfx = SoundboardSFX{name, icon, color, sound, lowlatency: low};
             let mut sfxs = set.soundboard;
 
             sfxs.push(sfx);
@@ -40,14 +40,14 @@ pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: Strin
 }
 
 #[tauri::command]
-pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, oldname: String) -> Result<(), String> {
+pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, oldname: String, low: bool) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
             let mut channels = set.channels;
 
             if let Some(pos) = channels.iter().position(|c| c.name == oldname) {
-                channels[pos] = Channel{name, icon, color, device: deviceapps, deviceorapp: device};
+                channels[pos] = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low};
             } else {
                 return Err(format!("Channel '{}' not found", oldname));
             }
@@ -58,14 +58,14 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
 }
 
 #[tauri::command]
-pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound: String, oldname: String) -> Result<(), String> {
+pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound: String, oldname: String, low: bool) -> Result<(), String> {
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
             let mut sfxs = set.soundboard;
 
             if let Some(pos) = sfxs.iter().position(|c| c.name == oldname) {
-                sfxs[pos] = SoundboardSFX{name, icon, color, sound};
+                sfxs[pos] = SoundboardSFX{name, icon, color, sound, lowlatency: low};
             } else {
                 return Err(format!("Soundeffect '{}' not found", oldname));
             }
@@ -163,6 +163,6 @@ pub(crate) fn flutter_print(text: &str) {
 }
 
 #[tauri::command]
-pub(crate) fn play_sound(sound: String) {
-    let _ = audio::play_sfx(&sound);
+pub(crate) fn play_sound(sound: String, low: bool) {
+    let _ = audio::play_sfx(&sound, low);
 }
