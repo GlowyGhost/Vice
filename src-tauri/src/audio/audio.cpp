@@ -1293,7 +1293,7 @@ extern "C" {
             bool found;
         } userdata{ input, PA_INVALID_INDEX, false };
 
-        auto sink_input_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* userdata) {
+        auto sink_input_cb = [](pa_context* _c, const pa_sink_input_info* i, int eol, void* userdata) {
             if (eol > 0) return;
             auto ud = (UserData*)userdata;
             const char* name = pa_proplist_gets(i->proplist, PA_PROP_APPLICATION_NAME);
@@ -1316,7 +1316,7 @@ extern "C" {
         uint32_t sinkIndex = PA_INVALID_INDEX;
         if (output) {
             struct OutputData { const char* name; uint32_t idx; } outdata{ output, PA_INVALID_INDEX };
-            auto sink_cb = [](pa_context* c, const pa_sink_info* i, int eol, void* userdata) {
+            auto sink_cb = [](pa_context* _c, const pa_sink_info* i, int eol, void* userdata) {
                 if (eol > 0) return;
                 auto od = (OutputData*)userdata;
                 if (i->description && strcmp(i->description, od->name) == 0)
@@ -1341,7 +1341,7 @@ extern "C" {
                 }
             };
 
-            pa_context_get_sink_input_info_by_index(context, userdata.sinkInputIndex, check_and_move_cb, &moveData);
+            pa_context_get_sink_info_by_index(context, userdata.sinkInputIndex, check_and_move_cb, &moveData);
             pa_mainloop_iterate(mainloop, 1, nullptr);
         }
 
