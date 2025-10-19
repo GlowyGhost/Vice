@@ -6,6 +6,7 @@ Please if you're planning to contributing. Add what you're doing in the roadmap 
 |----|-----|----|-----|
 |UI|Completed|20/09/2025|Small details need to be completed.|
 |Rust and Flutter linking|Completed|20/09/2025|Everything is completed currently.|
-|C++ Audio Engine|In progress|20/09/2025|
-|Device Capture|Completed|
-|App Capture|In progress|
+|C++ Audio Engine|Completed|19/10/2025|
+|Device Capture|Completed|27/09/2025|
+|App Capture|Completed|19/10/2025|
+|Resampling|Completed|19/10/2025|

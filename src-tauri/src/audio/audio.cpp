@@ -26,6 +26,8 @@
 #include <unistd.h>
 #include <fstream>
 #include <pulse/pulseaudio.h>
+#include <pulse/simple.h>
+#include <pulse/error.h>
 #endif
 #pragma endregion
 
@@ -115,7 +117,6 @@ float* linear_resample_interleaved(const float* src, size_t srcFrames, int chann
     return out;
 }
 
-// Simple channel remap (repeat / drop)
 float* remap_channels_interleaved(const float* src, size_t frames, int srcCh, int dstCh) {
     float* out = new float[frames * dstCh];
     for (size_t f = 0; f < frames; ++f) {
@@ -127,7 +128,33 @@ float* remap_channels_interleaved(const float* src, size_t frames, int srcCh, in
 }
 
 bool is_format_float(WAVEFORMATEX* wf) {
-    return wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
+    if (!wf) return false;
+    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) return true;
+    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        WAVEFORMATEXTENSIBLE* ext = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(wf);
+        if (ext->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) return true;
+    }
+    return false;
+}
+
+bool is_format_int32(WAVEFORMATEX* wf) {
+    if (!wf) return false;
+    if (wf->wFormatTag == WAVE_FORMAT_PCM && wf->wBitsPerSample == 32) return true;
+    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        WAVEFORMATEXTENSIBLE* ext = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(wf);
+        if (ext->SubFormat == KSDATAFORMAT_SUBTYPE_PCM && wf->wBitsPerSample == 32) return true;
+    }
+    return false;
+}
+#else
+snd_pcm_format_t get_alsa_format(int bitsPerSample, bool isFloat) {
+    if (isFloat) {
+        if (bitsPerSample == 32) return SND_PCM_FORMAT_FLOAT_LE;
+    } else {
+        if (bitsPerSample == 16) return SND_PCM_FORMAT_S16_LE;
+        if (bitsPerSample == 32) return SND_PCM_FORMAT_S32_LE;
+    }
+    return SND_PCM_FORMAT_UNKNOWN;
 }
 #endif
 
@@ -564,23 +591,25 @@ extern "C" {
     #pragma endregion
     #pragma region Play Sound
     void play_sound(const char* wav_file, const char* device_name, bool low_latency) {
-        #ifdef _WIN32
         WAVData wav = loadWav(wav_file);
         if (!wav.buffer || wav.channels <= 0) {
             std::cerr << "Failed to load WAV: " << wav_file << "\n";
             return;
         }
 
+        #ifdef _WIN32
         CoInitialize(nullptr);
+        IMMDevice* targetDevice = nullptr;
 
-        IMMDeviceEnumerator* pEnum = nullptr;
-        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum)))) {
-            CoUninitialize(); return;
+        targetDevice = find_device_by_name(eRender, device_name);
+        if (!targetDevice) {
+            IMMDeviceEnumerator* pEnum = nullptr;
+            CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum));
+            pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &targetDevice);
+            pEnum->Release();
         }
 
-        IMMDevice* targetDevice = nullptr;
-        pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &targetDevice);
-        if (!targetDevice) { pEnum->Release(); CoUninitialize(); return; }
+        if (!targetDevice) { std::cerr << "No audio device found\n"; CoUninitialize(); return; }
 
         IAudioClient* audioClient = nullptr;
         if (FAILED(targetDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&audioClient))) {
@@ -589,57 +618,68 @@ extern "C" {
 
         WAVEFORMATEX* pwfx = nullptr;
         if (FAILED(audioClient->GetMixFormat(&pwfx)) || !pwfx) {
+            std::cerr << "GetMixFormat failed\n";
             audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
         }
 
-        unsigned dstRate = pwfx->nSamplesPerSec;
-        int dstCh = pwfx->nChannels;
-
+        const int16_t* src16 = reinterpret_cast<const int16_t*>(wav.buffer);
         size_t srcFrames = wav.bufferSize / (wav.channels * sizeof(int16_t));
-        float* srcFloat = int16_to_float(reinterpret_cast<int16_t*>(wav.buffer), srcFrames, wav.channels);
+        float* srcFloat = int16_to_float(src16, srcFrames, wav.channels);
 
         size_t resampledFrames = 0;
-        float* resampled = linear_resample_interleaved(srcFloat, srcFrames, wav.channels, wav.sampleRate, dstRate, &resampledFrames);
-        delete[] srcFloat;
+        float* resampled = linear_resample_interleaved(srcFloat, srcFrames, wav.channels, wav.sampleRate, pwfx->nSamplesPerSec, &resampledFrames);
 
-        float* remapped = remap_channels_interleaved(resampled, resampledFrames, wav.channels, dstCh);
-        delete[] resampled;
+        float* finalBuffer = remap_channels_interleaved(resampled, resampledFrames, wav.channels, pwfx->nChannels);
 
         size_t bytesPerSample = pwfx->wBitsPerSample / 8;
-        size_t bytesPerFrame = dstCh * bytesPerSample;
-        size_t totalBytes = resampledFrames * bytesPerFrame;
+        size_t bytesPerFrame = pwfx->nChannels * bytesPerSample;
+        size_t totalBytes = resampledFrames * pwfx->nChannels * bytesPerSample;
+        std::vector<char> outBuffer(totalBytes);
 
-        char* outBuffer = new char[totalBytes];
         if (is_format_float(pwfx) && pwfx->wBitsPerSample == 32) {
-            memcpy(outBuffer, remapped, totalBytes);
-        } else if (!is_format_float(pwfx) && pwfx->wBitsPerSample == 16) {
-            int16_t* p16 = reinterpret_cast<int16_t*>(outBuffer);
-            for (size_t i = 0; i < resampledFrames * dstCh; ++i) {
-                float v = std::clamp(remapped[i], -1.f, 1.f);
-                p16[i] = static_cast<int16_t>(v * 32767.f);
+            memcpy(outBuffer.data(), finalBuffer, totalBytes);
+        } else if (is_format_int32(pwfx)) {
+            int32_t* out32 = reinterpret_cast<int32_t*>(outBuffer.data());
+            for (size_t i = 0; i < resampledFrames * pwfx->nChannels; ++i) {
+                float v = std::max(-1.f, std::min(1.f, finalBuffer[i]));
+                out32[i] = static_cast<int32_t>(v * 2147483647.f);
             }
+        } else {
+            std::cerr << "Unsupported device format\n";
+            CoTaskMemFree(pwfx);
+            audioClient->Release();
+            targetDevice->Release();
+            CoUninitialize();
+            return;
         }
-        delete[] remapped;
 
         REFERENCE_TIME bufferDuration = low_latency ? 100000 : 500000;
         if (FAILED(audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, bufferDuration, 0, pwfx, nullptr))) {
-            delete[] outBuffer; CoTaskMemFree(pwfx); audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
+            std::cerr << "AudioClient Initialize failed\n";
+            CoTaskMemFree(pwfx);
+            audioClient->Release();
+            targetDevice->Release();
+            CoUninitialize();
+            return;
         }
+
         CoTaskMemFree(pwfx);
 
         IAudioRenderClient* renderClient = nullptr;
         if (FAILED(audioClient->GetService(__uuidof(IAudioRenderClient), (void**)&renderClient))) {
-            delete[] outBuffer; audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
+            audioClient->Release();
+            targetDevice->Release();
+            CoUninitialize();
+            return;
         }
 
         UINT32 bufferFrameCount = 0;
         audioClient->GetBufferSize(&bufferFrameCount);
-        if (FAILED(audioClient->Start())) {
-            delete[] outBuffer; renderClient->Release(); audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
-        }
+        audioClient->Start();
 
-        std::thread([renderClient, audioClient, outBuffer, totalBytes, bytesPerFrame, bufferFrameCount]() mutable {
+        std::thread([renderClient, audioClient, outBuffer, bytesPerFrame, bufferFrameCount]() {
             size_t offset = 0;
+            size_t totalBytes = outBuffer.size();
             while (offset < totalBytes && !stop_audio.load()) {
                 UINT32 padding = 0;
                 if (FAILED(audioClient->GetCurrentPadding(&padding))) break;
@@ -651,11 +691,10 @@ extern "C" {
                 UINT32 bytesLeft = static_cast<UINT32>(totalBytes - offset);
                 UINT32 bytesToWrite = std::min(bytesAvailable, bytesLeft);
                 UINT32 framesToWrite = bytesToWrite / bytesPerFrame;
-                if (framesToWrite == 0) break;
 
                 BYTE* pData = nullptr;
                 if (FAILED(renderClient->GetBuffer(framesToWrite, &pData))) break;
-                memcpy(pData, outBuffer + offset, framesToWrite * bytesPerFrame);
+                memcpy(pData, outBuffer.data() + offset, framesToWrite * bytesPerFrame);
                 offset += framesToWrite * bytesPerFrame;
                 renderClient->ReleaseBuffer(framesToWrite, 0);
             }
@@ -663,50 +702,64 @@ extern "C" {
             audioClient->Stop();
             renderClient->Release();
             audioClient->Release();
-            delete[] outBuffer;
         }).detach();
 
         targetDevice->Release();
-        pEnum->Release();
-        delete[] wav.buffer;
         #else
-        snd_pcm_t* handle;
         const char* alsa_device = (device_name && strlen(device_name) > 0) ? device_name : "default";
-        int err = snd_pcm_open(&handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0);
-        if (err < 0) {
-            std::cerr << "snd_pcm_open error: " << snd_strerror(err) << "\n";
+        snd_pcm_t* handle;
+        if (snd_pcm_open(&handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0) < 0) {
+            std::cerr << "Cannot open ALSA device\n";
             return;
         }
 
-        err = snd_pcm_set_params(handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, wav.channels, wav.sampleRate, 1, 500000);
-        if (err < 0) {
-            std::cerr << "snd_pcm_set_params error: " << snd_strerror(err) << "\n";
+        snd_pcm_hw_params_t* params;
+        snd_pcm_hw_params_malloc(&params);
+        snd_pcm_hw_params_any(handle, params);
+
+        bool isFloat = false;
+        int bitsPerSample = 16;
+
+        if (wav.bufferSize % (wav.channels * sizeof(int16_t)) == 0)
+            bitsPerSample = 16;
+        else if (wav.bufferSize % (wav.channels * sizeof(int32_t)) == 0)
+            bitsPerSample = 32;
+
+        snd_pcm_format_t format = get_alsa_format(bitsPerSample, isFloat);
+        if (format == SND_PCM_FORMAT_UNKNOWN) {
+            std::cerr << "Unsupported WAV format for ALSA\n";
+            snd_pcm_hw_params_free(params);
             snd_pcm_close(handle);
             return;
         }
 
-        std::thread([handle, wav]() mutable {
-            const int16_t* data = reinterpret_cast<const int16_t*>(wav.buffer.data());
-            size_t totalFrames = wav.buffer.size() / (wav.channels * sizeof(int16_t));
+        if (snd_pcm_hw_params_any(handle, params) < 0 ||
+            snd_pcm_hw_params_set_access(handle, params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0 ||
+            snd_pcm_hw_params_set_format(handle, params, format) < 0 ||
+            snd_pcm_hw_params_set_channels(handle, params, wav.channels) < 0 ||
+            snd_pcm_hw_params_set_rate(handle, params, wav.sampleRate, 0) < 0) {
+            std::cerr << "Cannot configure ALSA device\n";
+            snd_pcm_hw_params_free(params);
+            snd_pcm_close(handle);
+            return;
+        }
+
+        snd_pcm_hw_params(handle, params);
+        snd_pcm_hw_params_free(params);
+
+        std::thread([handle, wav, format]() {
+            const void* data = wav.buffer;
+            size_t frameSize = wav.channels * ((format == SND_PCM_FORMAT_S16_LE) ? 2 : (format == SND_PCM_FORMAT_S32_LE || format == SND_PCM_FORMAT_FLOAT_LE) ? 4 : 0);
+            size_t totalFrames = wav.bufferSize / frameSize;
             size_t framesWritten = 0;
-            const size_t chunkFrames = 1024;
+            const size_t chunkFrames = low_latency ? 512 : 1024;
 
             while (framesWritten < totalFrames && !stop_audio.load()) {
                 size_t toWrite = std::min(chunkFrames, totalFrames - framesWritten);
-                snd_pcm_sframes_t written = snd_pcm_writei(handle, data + framesWritten * wav.channels, toWrite);
-                if (written == -EPIPE) {
-                    snd_pcm_prepare(handle);
-                    continue;
-                } else if (written < 0) {
-                    if ((int)written == -ESTRPIPE) {
-                        snd_pcm_resume(handle);
-                        continue;
-                    }
-                    std::cerr << "snd_pcm_writei error: " << snd_strerror((int)written) << "\n";
-                    break;
-                } else {
-                    framesWritten += (size_t)written;
-                }
+                snd_pcm_sframes_t written = snd_pcm_writei(handle, (const char*)data + framesWritten * frameSize, toWrite);
+                if (written == -EPIPE) { snd_pcm_prepare(handle); continue; }
+                else if (written < 0) { std::cerr << "ALSA write error\n"; break; }
+                else framesWritten += written;
             }
 
             snd_pcm_drain(handle);
@@ -718,24 +771,16 @@ extern "C" {
     #pragma region Device to Device Pipe
     void device_to_device(const char* input, const char* output, bool low_latency) {
         #ifdef _WIN32
-        HRESULT hr = S_OK;
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
         IMMDevice* captureDevice = find_device_by_name(eCapture, input);
-        IMMDevice* renderDevice  = find_device_by_name(eRender,  output);
+        IMMDevice* renderDevice  = find_device_by_name(eRender, output);
 
-        if (!captureDevice) {
-            IMMDeviceEnumerator* pEnum = nullptr;
+        IMMDeviceEnumerator* pEnum = nullptr;
+        if (!captureDevice || !renderDevice) {
             if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum)))) {
-                pEnum->GetDefaultAudioEndpoint(eCapture, eConsole, &captureDevice);
-                pEnum->Release();
-            }
-        }
-        if (!renderDevice) {
-            IMMDeviceEnumerator* pEnum = nullptr;
-            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnum)))) {
-                pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &renderDevice);
-                pEnum->Release();
+                if (!captureDevice) pEnum->GetDefaultAudioEndpoint(eCapture, eConsole, &captureDevice);
+                if (!renderDevice) pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &renderDevice);
             }
         }
 
@@ -743,361 +788,259 @@ extern "C" {
             std::cerr << "WASAPI: could not find capture or render device\n";
             if (captureDevice) captureDevice->Release();
             if (renderDevice) renderDevice->Release();
+            if (pEnum) pEnum->Release();
             CoUninitialize();
             return;
         }
+        if (pEnum) pEnum->Release();
 
         IAudioClient* captureClient = nullptr;
         IAudioClient* renderClient  = nullptr;
-        if (FAILED(captureDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&captureClient))) {
-            std::cerr << "WASAPI: failed to activate capture client\n";
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
-        if (FAILED(renderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&renderClient))) {
-            std::cerr << "WASAPI: failed to activate render client\n";
-            captureClient->Release(); captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
+        if (FAILED(captureDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&captureClient)) ||
+            FAILED(renderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&renderClient))) {
+            std::cerr << "WASAPI: failed to activate client\n";
+            captureDevice->Release(); renderDevice->Release(); CoUninitialize(); return;
         }
 
         WAVEFORMATEX* wfCapture = nullptr;
         WAVEFORMATEX* wfRender  = nullptr;
-        if (FAILED(captureClient->GetMixFormat(&wfCapture)) || wfCapture == nullptr) {
-            std::cerr << "WASAPI: GetMixFormat capture failed\n";
-            renderClient->Release(); captureClient->Release(); captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
-        if (FAILED(renderClient->GetMixFormat(&wfRender)) || wfRender == nullptr) {
-            std::cerr << "WASAPI: GetMixFormat render failed\n";
-            CoTaskMemFree(wfCapture);
-            renderClient->Release(); captureClient->Release(); captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
+        if (FAILED(captureClient->GetMixFormat(&wfCapture)) || FAILED(renderClient->GetMixFormat(&wfRender)) || !wfCapture || !wfRender) {
+            std::cerr << "WASAPI: GetMixFormat failed\n";
+            if (wfCapture) CoTaskMemFree(wfCapture);
+            if (wfRender) CoTaskMemFree(wfRender);
+            captureClient->Release(); renderClient->Release();
+            captureDevice->Release(); renderDevice->Release();
+            CoUninitialize(); return;
         }
 
         bool captureIsFloat = is_format_float(wfCapture);
         bool renderIsFloat  = is_format_float(wfRender);
 
-        bool formats_equal = (wfCapture->nChannels == wfRender->nChannels) && (wfCapture->nSamplesPerSec == wfRender->nSamplesPerSec)
-            && (wfCapture->wBitsPerSample == wfRender->wBitsPerSample) && (captureIsFloat == renderIsFloat);
-
-        if (!formats_equal) {
-            std::cerr << "WASAPI: device formats differ. Aborting pipe. Capture: " << wfCapture->nChannels << "ch@" << wfCapture->nSamplesPerSec << "Hz "
-                    << wfCapture->wBitsPerSample << "b " << (captureIsFloat ? "float" : "int") << "  Render: "
-                    << wfRender->nChannels << "ch@" << wfRender->nSamplesPerSec << "Hz " << wfRender->wBitsPerSample << "b " << (renderIsFloat ? "float" : "int")
-                    << "\n";
-            CoTaskMemFree(wfCapture);
-            CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
-
-        REFERENCE_TIME requestedBufferPeriod = 100000;
-        DWORD initFlags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
-
-        hr = captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, initFlags, requestedBufferPeriod, 0, wfCapture, NULL);
-        if (FAILED(hr)) {
-            std::cerr << "WASAPI: capture Initialize failed: 0x" << std::hex << hr << "\n";
+        REFERENCE_TIME bufferDuration = low_latency ? 100000 : 500000;
+        if (FAILED(captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, bufferDuration, 0, wfCapture, nullptr)) ||
+            FAILED(renderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, bufferDuration, 0, wfRender, nullptr))) {
+            std::cerr << "WASAPI: Initialize failed\n";
             CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
+            captureClient->Release(); renderClient->Release();
+            captureDevice->Release(); renderDevice->Release();
+            CoUninitialize(); return;
         }
 
-        hr = renderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, initFlags, requestedBufferPeriod, 0, wfRender, NULL);
-        if (FAILED(hr)) {
-            std::cerr << "WASAPI: render Initialize failed: 0x" << std::hex << hr << "\n";
+        IAudioCaptureClient* pCapture = nullptr;
+        IAudioRenderClient*  pRender  = nullptr;
+        if (FAILED(captureClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCapture)) ||
+            FAILED(renderClient->GetService(__uuidof(IAudioRenderClient), (void**)&pRender))) {
+            std::cerr << "WASAPI: GetService failed\n";
             CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
+            captureClient->Release(); renderClient->Release();
+            captureDevice->Release(); renderDevice->Release();
+            CoUninitialize(); return;
         }
 
-        HANDLE hCaptureEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        HANDLE hRenderEvent  = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-        if (!hCaptureEvent || !hRenderEvent) {
-            std::cerr << "WASAPI: CreateEvent failed\n";
-            if (hCaptureEvent) CloseHandle(hCaptureEvent);
-            if (hRenderEvent) CloseHandle(hRenderEvent);
-            CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
+        UINT32 captureFrames = 0, renderFrames = 0;
+        captureClient->GetBufferSize(&captureFrames);
+        renderClient->GetBufferSize(&renderFrames);
 
-        if (FAILED(captureClient->SetEventHandle(hCaptureEvent))) {
-            std::cerr << "WASAPI: SetEventHandle capture failed\n";
-            CloseHandle(hCaptureEvent); CloseHandle(hRenderEvent);
-            CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
-        if (FAILED(renderClient->SetEventHandle(hRenderEvent))) {
-            std::cerr << "WASAPI: SetEventHandle render failed\n";
-            captureClient->SetEventHandle(NULL);
-            CloseHandle(hCaptureEvent); CloseHandle(hRenderEvent);
-            CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
+        size_t maxFrames = std::max(captureFrames, renderFrames);
+        int captureChannels = wfCapture->nChannels;
+        int renderChannels  = wfRender->nChannels;
 
-        IAudioCaptureClient* pCaptureClient = nullptr;
-        IAudioRenderClient*  pRenderClient  = nullptr;
-        if (FAILED(captureClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient))) {
-            std::cerr << "WASAPI: GetService capture failed\n";
-            CloseHandle(hCaptureEvent); CloseHandle(hRenderEvent);
-            CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
-        if (FAILED(renderClient->GetService(__uuidof(IAudioRenderClient), (void**)&pRenderClient))) {
-            std::cerr << "WASAPI: GetService render failed\n";
-            pCaptureClient->Release();
-            CloseHandle(hCaptureEvent); CloseHandle(hRenderEvent);
-            CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
-            renderClient->Release(); captureClient->Release();
-            captureDevice->Release(); renderDevice->Release(); CoUninitialize();
-            return;
-        }
+        std::vector<float> captureBuffer(maxFrames * captureChannels);
+        std::vector<float> renderBuffer(maxFrames * renderChannels);
 
-        UINT32 captureBufferFrames = 0;
-        UINT32 renderBufferFrames  = 0;
-        captureClient->GetBufferSize(&captureBufferFrames);
-        renderClient->GetBufferSize(&renderBufferFrames);
-
-        hr = captureClient->Start();
-        if (FAILED(hr)) {
-            std::cerr << "WASAPI: capture Start failed\n";
-            goto wasapi_cleanup;
-        }
-        hr = renderClient->Start();
-        if (FAILED(hr)) {
-            std::cerr << "WASAPI: render Start failed\n";
-            goto wasapi_cleanup;
-        }
-
-        const UINT32 bytesPerSample = wfCapture->wBitsPerSample / 8;
-        const UINT32 channels = wfCapture->nChannels;
-        const UINT32 bytesPerFrame = bytesPerSample * channels;
+        captureClient->Start();
+        renderClient->Start();
 
         while (!stop_audio.load()) {
-            DWORD wait = WaitForSingleObject(hCaptureEvent, 2000);
-            if (wait == WAIT_TIMEOUT) {
-                continue;
-            } else if (wait != WAIT_OBJECT_0) {
-                break;
-            }
-
             UINT32 packetFrames = 0;
-            if (FAILED(pCaptureClient->GetNextPacketSize(&packetFrames))) break;
-            if (packetFrames == 0) continue;
+            if (FAILED(pCapture->GetNextPacketSize(&packetFrames)) || packetFrames == 0) {
+                Sleep(1);
+                continue;
+            }
 
             BYTE* pData = nullptr;
             UINT32 numFrames = 0;
             DWORD flags = 0;
-            if (FAILED(pCaptureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr))) break;
-            if (numFrames == 0) {
-                pCaptureClient->ReleaseBuffer(0);
-                continue;
+            if (FAILED(pCapture->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr))) break;
+
+            if (captureIsFloat) {
+                memcpy(captureBuffer.data(), pData, numFrames * captureChannels * sizeof(float));
+            } else if (wfCapture->wBitsPerSample == 16) {
+                int16_t* src16 = reinterpret_cast<int16_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * captureChannels; ++i)
+                    captureBuffer[i] = src16[i] / 32768.f;
+            } else if (wfCapture->wBitsPerSample == 32) {
+                int32_t* src32 = reinterpret_cast<int32_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * captureChannels; ++i)
+                    captureBuffer[i] = src32[i] / 2147483648.f;
             }
 
-            UINT32 framesLeft = numFrames;
-            const BYTE* readPtr = pData;
-            while (framesLeft > 0 && !stop_audio.load()) {
+            pCapture->ReleaseBuffer(numFrames);
+
+            float* toRender = nullptr;
+            size_t outFrames = 0;
+            if (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec || captureChannels != renderChannels) {
+                float* resampled = linear_resample_interleaved(captureBuffer.data(), numFrames, captureChannels, wfCapture->nSamplesPerSec,
+                    wfRender->nSamplesPerSec, &outFrames);
+                float* remapped = remap_channels_interleaved(resampled, outFrames, captureChannels, renderChannels);
+                delete[] resampled;
+                toRender = remapped;
+            } else {
+                toRender = captureBuffer.data();
+                outFrames = numFrames;
+            }
+
+            UINT32 written = 0;
+            while (written < outFrames && !stop_audio.load()) {
                 UINT32 padding = 0;
-                if (FAILED(renderClient->GetCurrentPadding(&padding))) { framesLeft = 0; break; }
-                UINT32 available = (renderBufferFrames > padding) ? (renderBufferFrames - padding) : 0;
-                if (available == 0) {
-                    DWORD w = WaitForSingleObject(hRenderEvent, 10);
-                    if (w == WAIT_TIMEOUT) continue;
-                    else if (w != WAIT_OBJECT_0) { framesLeft = 0; break; }
-                    else continue;
-                }
-                UINT32 toWrite = (framesLeft < available) ? framesLeft : available;
+                renderClient->GetCurrentPadding(&padding);
+                UINT32 avail = renderFrames - padding;
+                if (avail == 0) { Sleep(1); continue; }
 
+                UINT32 framesToWrite = std::min(avail, static_cast<UINT32>(outFrames - written));
                 BYTE* renderPtr = nullptr;
-                if (FAILED(pRenderClient->GetBuffer(toWrite, &renderPtr))) { framesLeft = 0; break; }
+                if (FAILED(pRender->GetBuffer(framesToWrite, &renderPtr))) break;
 
-                memcpy(renderPtr, readPtr, (size_t)toWrite * bytesPerFrame);
-                if (FAILED(pRenderClient->ReleaseBuffer(toWrite, 0))) { framesLeft = 0; break; }
+                if (renderIsFloat && wfRender->wBitsPerSample == 32) {
+                    memcpy(renderPtr, toRender + written * renderChannels, framesToWrite * renderChannels * sizeof(float));
+                } else if (!renderIsFloat && wfRender->wBitsPerSample == 16) {
+                    int16_t* out16 = reinterpret_cast<int16_t*>(renderPtr);
+                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i)
+                        out16[i] = std::max(-32768.f, std::min(32767.f, toRender[written * renderChannels + i] * 32768.f));
+                } else if (!renderIsFloat && wfRender->wBitsPerSample == 32) {
+                    int32_t* out32 = reinterpret_cast<int32_t*>(renderPtr);
+                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i)
+                        out32[i] = std::max(-2147483648.f, std::min(2147483647.f, toRender[written * renderChannels + i] * 2147483648.f));
+                }
 
-                readPtr += (size_t)toWrite * bytesPerFrame;
-                framesLeft -= toWrite;
+                if (FAILED(pRender->ReleaseBuffer(framesToWrite, 0))) break;
+                written += framesToWrite;
             }
 
-            if (FAILED(pCaptureClient->ReleaseBuffer(numFrames))) break;
+            if (toRender != captureBuffer.data()) delete[] toRender;
         }
 
-        wasapi_cleanup:
-        if (pCaptureClient) pCaptureClient->Release();
-        if (pRenderClient) pRenderClient->Release();
-        if (captureClient) captureClient->Stop();
-        if (renderClient) renderClient->Stop();
-        if (captureClient) captureClient->Release();
-        if (renderClient) renderClient->Release();
-        if (captureDevice) captureDevice->Release();
-        if (renderDevice) renderDevice->Release();
-        if (wfCapture) CoTaskMemFree(wfCapture);
-        if (wfRender) CoTaskMemFree(wfRender);
-        if (hCaptureEvent) CloseHandle(hCaptureEvent);
-        if (hRenderEvent) CloseHandle(hRenderEvent);
+        captureClient->Stop();
+        renderClient->Stop();
+        pCapture->Release();
+        pRender->Release();
+        captureClient->Release();
+        renderClient->Release();
+        captureDevice->Release();
+        renderDevice->Release();
+        CoTaskMemFree(wfCapture);
+        CoTaskMemFree(wfRender);
         CoUninitialize();
-
         #else
-        snd_pcm_t* captureHandle = nullptr;
-        snd_pcm_t* playbackHandle = nullptr;
-        int err;
+        struct PADevicePipe {
+            pa_mainloop* mainloop = nullptr;
+            pa_context* context = nullptr;
+            pa_stream* captureStream = nullptr;
+            pa_stream* playbackStream = nullptr;
+            std::vector<float> captureBuffer;
+            std::vector<float> playbackBuffer;
+            unsigned captureChannels = 0;
+            unsigned playbackChannels = 0;
+            unsigned captureRate = 0;
+            unsigned playbackRate = 0;
+        };
 
-        const char* capture_device = (input && strlen(input) > 0) ? input : "default";
-        const char* playback_device = (output && strlen(output) > 0) ? output : "default";
+        PADevicePipe pipe;
 
-        if ((err = snd_pcm_open(&captureHandle, capture_device, SND_PCM_STREAM_CAPTURE, 0)) < 0) {
-            std::cerr << "ALSA: cannot open capture device " << capture_device << " : " << snd_strerror(err) << "\n";
-            return;
+        pipe.mainloop = pa_mainloop_new();
+        pipe.context = pa_context_new(pa_mainloop_get_api(pipe.mainloop), "DevicePipe");
+
+        pa_context_connect(pipe.context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+
+        while (true) {
+            pa_context_state_t state = pa_context_get_state(pipe.context);
+            if (state == PA_CONTEXT_READY) break;
+            if (!PA_CONTEXT_IS_GOOD(state)) {
+                std::cerr << "PulseAudio context failed\n";
+                pa_context_unref(pipe.context);
+                pa_mainloop_free(pipe.mainloop);
+                return;
+            }
+            pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
         }
 
-        snd_pcm_hw_params_t* capture_params = nullptr;
-        snd_pcm_hw_params_malloc(&capture_params);
-        snd_pcm_hw_params_any(captureHandle, capture_params);
-        if ((err = snd_pcm_hw_params_current(captureHandle, capture_params)) < 0) {
-            std::cerr << "ALSA: snd_pcm_hw_params_current failed: " << snd_strerror(err) << "\n";
-            snd_pcm_hw_params_free(capture_params);
-            snd_pcm_close(captureHandle);
-            return;
+        pa_sample_spec captureSpec;
+        captureSpec.format = PA_SAMPLE_FLOAT32LE;
+        captureSpec.channels = 2;
+        captureSpec.rate = 48000;
+
+        pipe.captureStream = pa_stream_new(pipe.context, "Capture", &captureSpec, nullptr);
+        pa_stream_connect_record(pipe.captureStream, input ? input : "default", nullptr, PA_STREAM_ADJUST_LATENCY | PA_STREAM_INTERPOLATE_TIMING);
+
+        pa_sample_spec playbackSpec;
+        playbackSpec.format = PA_SAMPLE_FLOAT32LE;
+        playbackSpec.channels = 2;
+        playbackSpec.rate = 48000;
+
+        pipe.playbackStream = pa_stream_new(pipe.context, "Playback", &playbackSpec, nullptr);
+        pa_stream_connect_playback(pipe.playbackStream, output ? output : "default",
+                                nullptr, PA_STREAM_INTERPOLATE_TIMING, nullptr, nullptr);
+
+        while (pa_stream_get_state(pipe.captureStream) != PA_STREAM_READY ||
+            pa_stream_get_state(pipe.playbackStream) != PA_STREAM_READY) {
+            pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
         }
 
-        snd_pcm_format_t format;
-        unsigned int rate = 0;
-        int channels = 0;
-        snd_pcm_hw_params_get_format(capture_params, &format);
-        snd_pcm_hw_params_get_rate(capture_params, &rate, 0);
-        snd_pcm_hw_params_get_channels(capture_params, &channels);
+        pipe.captureChannels = captureSpec.channels;
+        pipe.playbackChannels = playbackSpec.channels;
+        pipe.captureRate = captureSpec.rate;
+        pipe.playbackRate = playbackSpec.rate;
 
-        snd_pcm_hw_params_free(capture_params);
-
-        if (channels <= 0 || rate == 0) {
-            std::cerr << "ALSA: invalid capture params\n";
-            snd_pcm_close(captureHandle);
-            return;
-        }
-
-        if ((err = snd_pcm_open(&playbackHandle, playback_device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-            std::cerr << "ALSA: cannot open playback device " << playback_device << " : " << snd_strerror(err) << "\n";
-            snd_pcm_close(captureHandle);
-            return;
-        }
-
-        snd_pcm_hw_params_t* play_params = nullptr;
-        snd_pcm_hw_params_malloc(&play_params);
-        snd_pcm_hw_params_any(playbackHandle, play_params);
-
-        if ((err = snd_pcm_hw_params_set_access(playbackHandle, play_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
-            std::cerr << "ALSA: cannot set access: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-        if ((err = snd_pcm_hw_params_set_format(playbackHandle, play_params, format)) < 0) {
-            std::cerr << "ALSA: playback device does not support capture format: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-        if ((err = snd_pcm_hw_params_set_channels(playbackHandle, play_params, channels)) < 0) {
-            std::cerr << "ALSA: cannot set channels: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-        if ((err = snd_pcm_hw_params_set_rate_near(playbackHandle, play_params, &rate, 0)) < 0) {
-            std::cerr << "ALSA: cannot set rate: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-
-        snd_pcm_uframes_t periodSize = 256;
-        snd_pcm_uframes_t bufferSize = periodSize * 4;
-
-        if ((err = snd_pcm_hw_params_set_period_size_near(playbackHandle, play_params, &periodSize, 0)) < 0) {
-            std::cerr << "ALSA: cannot set period size: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-        if ((err = snd_pcm_hw_params_set_buffer_size_near(playbackHandle, play_params, &bufferSize)) < 0) {
-            std::cerr << "ALSA: cannot set buffer size: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-
-        if ((err = snd_pcm_hw_params(playbackHandle, play_params)) < 0) {
-            std::cerr << "ALSA: cannot set play hw params: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-
-        snd_pcm_uframes_t actualPeriod = 0;
-        snd_pcm_hw_params_get_period_size(play_params, &actualPeriod, 0);
-        if (actualPeriod == 0) actualPeriod = periodSize;
-
-        snd_pcm_hw_params_free(play_params);
-
-        if ((err = snd_pcm_prepare(captureHandle)) < 0) {
-            std::cerr << "ALSA: capture prepare failed: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-        if ((err = snd_pcm_prepare(playbackHandle)) < 0) {
-            std::cerr << "ALSA: playback prepare failed: " << snd_strerror(err) << "\n";
-            goto alsa_cleanup_open;
-        }
-
-        int bytesPerSample = snd_pcm_format_width(format) / 8;
-        int bytesPerFrame = bytesPerSample * channels;
-
-        const snd_pcm_uframes_t chunkFrames = actualPeriod;
-        std::vector<char> buffer(chunkFrames * bytesPerFrame);
+        size_t maxFrames = low_latency ? 2048 : 8192;
+        pipe.captureBuffer.resize(maxFrames * pipe.captureChannels);
+        pipe.playbackBuffer.resize(maxFrames * pipe.playbackChannels);
 
         while (!stop_audio.load()) {
-            if ((err = snd_pcm_wait(captureHandle, 2000)) < 0) {
-                std::cerr << "ALSA: snd_pcm_wait error: " << snd_strerror(err) << "\n";
-                break;
-            } else if (err == 0) {
+            const void* data = nullptr;
+            size_t frames = 0;
+            if (pa_stream_peek(pipe.captureStream, &data, &frames) < 0 || frames == 0) {
+                pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
                 continue;
             }
 
-            snd_pcm_sframes_t r = snd_pcm_readi(captureHandle, buffer.data(), chunkFrames);
-            if (r == -EAGAIN) {
-                continue;
-            } else if (r == -EPIPE) {
-                snd_pcm_prepare(captureHandle);
-                continue;
-            } else if (r < 0) {
-                std::cerr << "ALSA: read error: " << snd_strerror(r) << "\n";
-                break;
+            const float* in = reinterpret_cast<const float*>(data);
+            std::vector<float> floatData(frames * pipe.captureChannels);
+            memcpy(floatData.data(), in, frames * pipe.captureChannels * sizeof(float));
+
+            pa_stream_drop(pipe.captureStream);
+
+            float* toRender = nullptr;
+            size_t outFrames = 0;
+
+            if (pipe.captureRate != pipe.playbackRate || pipe.captureChannels != pipe.playbackChannels) {
+                float* resampled = linear_resample_interleaved(floatData.data(), frames, pipe.captureChannels, pipe.captureRate, pipe.playbackRate, &outFrames);
+                float* remapped = remap_channels_interleaved(resampled, outFrames, pipe.captureChannels, pipe.playbackChannels);
+                delete[] resampled;
+                toRender = remapped;
+            } else {
+                toRender = floatData.data();
+                outFrames = frames;
             }
 
-            snd_pcm_sframes_t framesRead = r;
-            char* writePtr = buffer.data();
-            while (framesRead > 0 && !stop_audio.load()) {
-                snd_pcm_sframes_t w = snd_pcm_writei(playbackHandle, writePtr, framesRead);
-                if (w == -EAGAIN) {
-                    continue;
-                } else if (w == -EPIPE) {
-                    snd_pcm_prepare(playbackHandle);
-                    continue;
-                } else if (w < 0) {
-                    std::cerr << "ALSA: write error: " << snd_strerror(w) << "\n";
-                    goto alsa_cleanup;
-                } else {
-                    writePtr += (size_t)w * bytesPerFrame;
-                    framesRead -= w;
-                }
+            size_t written = 0;
+            while (written < outFrames && !stop_audio.load()) {
+                size_t toWrite = std::min(static_cast<size_t>(1024), outFrames - written);
+                pa_stream_write(pipe.playbackStream, toRender + written * pipe.playbackChannels, toWrite * pipe.playbackChannels * sizeof(float),
+                    nullptr, 0LL, PA_SEEK_RELATIVE);
+                written += toWrite;
+                pa_mainloop_iterate(pipe.mainloop, 0, nullptr);
             }
+
+            if (toRender != floatData.data()) delete[] toRender;
         }
 
-        alsa_cleanup:
-        snd_pcm_drain(playbackHandle);
-        snd_pcm_close(playbackHandle);
-        snd_pcm_close(captureHandle);
-        return;
-
-        alsa_cleanup_open:
-        if (playbackHandle) snd_pcm_close(playbackHandle);
-        if (captureHandle) snd_pcm_close(captureHandle);
-        if (play_params) snd_pcm_hw_params_free(play_params);
-        return;
+        pa_stream_disconnect(pipe.captureStream);
+        pa_stream_disconnect(pipe.playbackStream);
+        pa_stream_unref(pipe.captureStream);
+        pa_stream_unref(pipe.playbackStream);
+        pa_context_disconnect(pipe.context);
+        pa_context_unref(pipe.context);
+        pa_mainloop_free(pipe.mainloop);
         #endif
     }
     #pragma endregion
@@ -1122,11 +1065,7 @@ extern "C" {
             } while (Process32NextW(hSnap, &pe32));
         }
         CloseHandle(hSnap);
-        if (!targetPid) {
-            std::cerr << "Process not found: " << input << "\n";
-            CoUninitialize();
-            return;
-        }
+        if (!targetPid) { std::cerr << "Process not found: " << input << "\n"; CoUninitialize(); return; }
 
         IMMDeviceEnumerator* pEnum = nullptr;
         CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -1147,8 +1086,7 @@ extern "C" {
         IMMDevice* captureDevice = nullptr;
         IMMDeviceCollection* devicesAll = nullptr;
         pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devicesAll);
-        UINT deviceCount = 0;
-        devicesAll->GetCount(&deviceCount);
+        UINT deviceCount = 0; devicesAll->GetCount(&deviceCount);
 
         for (UINT i = 0; i < deviceCount; ++i) {
             IMMDevice* dev = nullptr;
@@ -1156,16 +1094,11 @@ extern "C" {
 
             IAudioSessionManager2* mgr2 = nullptr;
             if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr2)) || !mgr2) {
-                dev->Release();
-                continue;
+                dev->Release(); continue;
             }
 
             IAudioSessionEnumerator* sessionEnum = nullptr;
-            if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) {
-                mgr2->Release();
-                dev->Release();
-                continue;
-            }
+            if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) { mgr2->Release(); dev->Release(); continue; }
 
             int sessionCount = 0;
             sessionEnum->GetCount(&sessionCount);
@@ -1177,32 +1110,22 @@ extern "C" {
 
                 IAudioSessionControl2* ctrl2 = nullptr;
                 if (SUCCEEDED(ctrl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctrl2)) && ctrl2) {
-                    DWORD pid = 0;
-                    ctrl2->GetProcessId(&pid);
-                    ctrl2->Release();
-                    if (pid == targetPid) {
-                        captureDevice = dev;
-                        captureDevice->AddRef();
-                        found = true;
-                        break;
-                    }
+                    DWORD pid = 0; ctrl2->GetProcessId(&pid); ctrl2->Release();
+                    if (pid == targetPid) { captureDevice = dev; captureDevice->AddRef(); found = true; break; }
                 }
                 ctrl->Release();
             }
 
-            sessionEnum->Release();
-            mgr2->Release();
-            dev->Release();
+            sessionEnum->Release(); mgr2->Release(); dev->Release();
             if (found) break;
         }
         devicesAll->Release();
 
-        if (!captureDevice) {
-            std::cerr << "Failed to find audio session for PID\n";
-            renderDevice->Release();
-            pEnum->Release();
-            CoUninitialize();
-            return;
+        if (!captureDevice) { std::cerr << "Failed to find audio session for PID\n"; renderDevice->Release(); pEnum->Release(); CoUninitialize(); return; }
+
+        if (captureDevice == renderDevice) {
+            std::cerr << "Capture and render device are the same. Feedback possible!\n";
+            captureDevice->Release(); renderDevice->Release(); pEnum->Release(); CoUninitialize(); return;
         }
 
         IAudioClient2* captureClient = nullptr;
@@ -1211,12 +1134,17 @@ extern "C" {
         IAudioClient* renderClient = nullptr;
         renderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&renderClient);
 
-        WAVEFORMATEX* wf = nullptr;
-        captureClient->GetMixFormat(&wf);
+        WAVEFORMATEX* wfCapture = nullptr;
+        WAVEFORMATEX* wfRender  = nullptr;
+        captureClient->GetMixFormat(&wfCapture);
+        renderClient->GetMixFormat(&wfRender);
 
-        REFERENCE_TIME bufferDuration = 1000000;
-        captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, bufferDuration, 0, wf, nullptr);
-        renderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, bufferDuration, 0, wf, nullptr);
+        DWORD renderFlags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+        DWORD captureFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+        REFERENCE_TIME bufferDuration = low_latency ? 20000 : 1000000;
+
+        captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED, captureFlags, bufferDuration, 0, wfCapture, nullptr);
+        renderClient->Initialize(AUDCLNT_SHAREMODE_SHARED, renderFlags, bufferDuration, 0, wfRender, nullptr);
 
         IAudioCaptureClient* pCaptureClient = nullptr;
         IAudioRenderClient* pRenderClient = nullptr;
@@ -1231,10 +1159,19 @@ extern "C" {
         UINT32 renderBufferFrames = 0;
         renderClient->GetBufferSize(&renderBufferFrames);
 
-        captureClient->Start();
-        renderClient->Start();
+        captureClient->Start(); renderClient->Start();
 
-        const UINT32 bytesPerFrame = wf->nChannels * (wf->wBitsPerSample / 8);
+        size_t captureFramesMax = wfCapture->nSamplesPerSec;
+        std::vector<float> captureBuffer(captureFramesMax * wfCapture->nChannels);
+
+        bool captureIsFloat = is_format_float(wfCapture);
+        bool renderIsFloat  = is_format_float(wfRender);
+        bool needResample = (wfCapture->nChannels != wfRender->nChannels)
+                        || (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec)
+                        || (captureIsFloat != renderIsFloat)
+                        || (wfCapture->wBitsPerSample != wfRender->wBitsPerSample);
+
+        const UINT32 renderBytesPerFrame = wfRender->nChannels * (wfRender->wBitsPerSample / 8);
 
         while (!stop_audio.load()) {
             DWORD wait = WaitForSingleObject(hCaptureEvent, 2000);
@@ -1249,45 +1186,82 @@ extern "C" {
             DWORD flags = 0;
             if (FAILED(pCaptureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr))) continue;
 
-            const BYTE* readPtr = pData;
-            UINT32 framesLeft = numFrames;
+            captureBuffer.resize(numFrames * wfCapture->nChannels);
+            if (captureIsFloat) {
+                memcpy(captureBuffer.data(), pData, numFrames * wfCapture->nChannels * sizeof(float));
+            } else if (wfCapture->wBitsPerSample == 16) {
+                int16_t* src16 = reinterpret_cast<int16_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * wfCapture->nChannels; ++i)
+                    captureBuffer[i] = src16[i] / 32768.f;
+            } else if (wfCapture->wBitsPerSample == 32) {
+                int32_t* src32 = reinterpret_cast<int32_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * wfCapture->nChannels; ++i)
+                    captureBuffer[i] = src32[i] / 2147483648.f;
+            }
 
-            while (framesLeft > 0 && !stop_audio.load()) {
+            pCaptureClient->ReleaseBuffer(numFrames);
+
+            float* outBuffer = nullptr;
+            size_t outFrames = 0;
+            if (needResample) {
+                outBuffer = linear_resample_interleaved(captureBuffer.data(), numFrames, wfCapture->nChannels, wfCapture->nSamplesPerSec,
+                    wfRender->nSamplesPerSec, &outFrames);
+                if (wfCapture->nChannels != wfRender->nChannels)
+                    outBuffer = remap_channels_interleaved(outBuffer, outFrames, wfCapture->nChannels, wfRender->nChannels);
+            } else {
+                outBuffer = captureBuffer.data();
+                outFrames = numFrames;
+            }
+
+            size_t framesLeft = outFrames;
+            size_t frameIdx = 0;
+            const UINT32 bytesPerFrame = wfRender->nChannels * (wfRender->wBitsPerSample / 8);
+            while (framesLeft > 0) {
                 DWORD waitRender = WaitForSingleObject(hRenderEvent, 2000);
                 if (waitRender != WAIT_OBJECT_0) break;
 
                 UINT32 padding = 0;
                 renderClient->GetCurrentPadding(&padding);
-
                 UINT32 available = (renderBufferFrames > padding) ? (renderBufferFrames - padding) : 0;
                 if (available == 0) break;
 
-                UINT32 toWrite = (framesLeft < available) ? framesLeft : available;
+                UINT32 toWrite = (framesLeft < available) ? (UINT32)framesLeft : available;
                 BYTE* renderPtr = nullptr;
                 if (FAILED(pRenderClient->GetBuffer(toWrite, &renderPtr))) break;
 
-                memcpy(renderPtr, readPtr, (size_t)toWrite * bytesPerFrame);
-                pRenderClient->ReleaseBuffer(toWrite, 0);
+                if (renderIsFloat) {
+                    memcpy(renderPtr, outBuffer + frameIdx * wfRender->nChannels, toWrite * wfRender->nChannels * sizeof(float));
+                } else if (wfRender->wBitsPerSample == 16) {
+                    int16_t* dst16 = reinterpret_cast<int16_t*>(renderPtr);
+                    for (UINT32 i = 0; i < toWrite * wfRender->nChannels; ++i) {
+                        float v = outBuffer[frameIdx * wfRender->nChannels + i] * 32767.f;
+                        dst16[i] = (int16_t)std::max(-32768.f, std::min(32767.f, v));
+                    }
+                } else if (wfRender->wBitsPerSample == 32) {
+                    int32_t* dst32 = reinterpret_cast<int32_t*>(renderPtr);
+                    for (UINT32 i = 0; i < toWrite * wfRender->nChannels; ++i) {
+                        double v = outBuffer[frameIdx * wfRender->nChannels + i] * 2147483647.0;
+                        dst32[i] = (int32_t)std::max(double(INT32_MIN), std::min(double(INT32_MAX), v));
+                    }
+                }
 
-                readPtr += (size_t)toWrite * bytesPerFrame;
+                pRenderClient->ReleaseBuffer(toWrite, 0);
                 framesLeft -= toWrite;
+                frameIdx += toWrite;
             }
 
-            pCaptureClient->ReleaseBuffer(numFrames);
+            if (needResample && outBuffer != captureBuffer.data())
+                delete[] outBuffer;
         }
 
-        captureClient->Stop();
-        renderClient->Stop();
-        CloseHandle(hCaptureEvent);
-        CloseHandle(hRenderEvent);
+        captureClient->Stop(); renderClient->Stop();
+        CloseHandle(hCaptureEvent); CloseHandle(hRenderEvent);
         if (pRenderClient) pRenderClient->Release();
         if (pCaptureClient) pCaptureClient->Release();
-        captureClient->Release();
-        renderClient->Release();
-        captureDevice->Release();
-        renderDevice->Release();
+        captureClient->Release(); renderClient->Release();
+        captureDevice->Release(); renderDevice->Release();
         pEnum->Release();
-        CoTaskMemFree(wf);
+        CoTaskMemFree(wfCapture); CoTaskMemFree(wfRender);
         CoUninitialize();
         #else
         pa_mainloop* mainloop = pa_mainloop_new();
@@ -1303,6 +1277,9 @@ extern "C" {
 
         if (state != PA_CONTEXT_READY) {
             std::cerr << "Failed to connect to PulseAudio\n";
+            pa_context_disconnect(context);
+            pa_context_unref(context);
+            pa_mainloop_free(mainloop);
             return;
         }
 
@@ -1310,7 +1287,7 @@ extern "C" {
             const char* targetApp;
             uint32_t sinkInputIndex;
             bool found;
-        } userdata{ input, PA_INVALID_INDEX, false };
+        } userdata{ inputApp, PA_INVALID_INDEX, false };
 
         auto sink_input_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* userdata) {
             if (eol > 0) return;
@@ -1321,71 +1298,118 @@ extern "C" {
                 ud->found = true;
             }
         };
-
         pa_context_get_sink_input_info_list(context, sink_input_cb, &userdata);
         pa_mainloop_iterate(mainloop, 1, nullptr);
 
         if (!userdata.found) {
-            std::cerr << "Target app not found: " << input << "\n";
+            std::cerr << "Target app not found: " << inputApp << "\n";
             pa_context_disconnect(context);
             pa_context_unref(context);
             pa_mainloop_free(mainloop);
             return;
         }
 
-        pa_sink_input_info sinkInfo{};
-        bool sinkFound = false;
-        auto sink_info_cb = [](pa_context* c, const pa_sink_info* i, int eol, void* userdata) {
-            if (eol > 0) return;
-            uint32_t* idx = (uint32_t*)userdata;
-            *idx = i->index;
-        };
-        
         uint32_t sinkIndex = PA_INVALID_INDEX;
-        if (output) {
-            struct OutputData { const char* name; uint32_t idx; } outdata{ output, PA_INVALID_INDEX };
+        if (outputSink) {
+            struct OutputData { const char* name; uint32_t idx; } outdata{ outputSink, PA_INVALID_INDEX };
             auto sink_cb = [](pa_context* c, const pa_sink_info* i, int eol, void* userdata) {
                 if (eol > 0) return;
                 auto od = (OutputData*)userdata;
-                if (i->description && strcmp(i->description, od->name) == 0) {
+                if (i->description && strcmp(i->description, od->name) == 0)
                     od->idx = i->index;
-                }
             };
             pa_context_get_sink_info_list(context, sink_cb, &outdata);
             pa_mainloop_iterate(mainloop, 1, nullptr);
-            if (outdata.idx != PA_INVALID_INDEX) sinkIndex = outdata.idx;
+            sinkIndex = outdata.idx;
         }
 
-        if (sinkIndex != PA_INVALID_INDEX)
+        if (sinkIndex != PA_INVALID_INDEX && sinkIndex != pa_sink_input_info_get_index(context, userdata.sinkInputIndex))
             pa_context_move_sink_input_by_index(context, userdata.sinkInputIndex, sinkIndex);
 
-        AudioData audioData{};
-        audioData.mainloop = mainloop;
+        pa_sample_spec appSpec{};
+        appSpec.format = PA_SAMPLE_FLOAT32LE;
+        appSpec.rate = low_latency ? 48000 : 44100;
+        appSpec.channels = 2;
+
+        pa_stream* inputStream = pa_stream_new(context, "capture", &appSpec, nullptr);
+        pa_stream* outputStream = pa_stream_new(context, "playback", &appSpec, nullptr);
+
+        struct AudioData {
+            pa_mainloop* mainloop;
+            pa_stream* inputStream;
+            pa_stream* outputStream;
+            std::vector<float> captureBuffer;
+            std::vector<float> outBuffer;
+            unsigned int inputChannels;
+            unsigned int outputChannels;
+            unsigned int inputRate;
+            unsigned int outputRate;
+        } audioData{ mainloop, inputStream, outputStream };
+
+        auto stream_read_cb = [](pa_stream* s, size_t length, void* userdata) {
+            auto data = (AudioData*)userdata;
+            const void* ptr;
+            if (pa_stream_peek(s, &ptr, &length) < 0 || !ptr) return;
+
+            size_t frames = length / (sizeof(float) * data->inputChannels);
+            data->captureBuffer.resize(frames * data->inputChannels);
+            memcpy(data->captureBuffer.data(), ptr, length);
+            pa_stream_drop(s);
+        };
+        pa_stream_set_read_callback(inputStream, stream_read_cb, &audioData);
 
         std::string monitorName = "@DEFAULT_MONITOR@";
-        pa_sample_spec ss{};
-        ss.format = PA_SAMPLE_S16LE;
-        ss.rate = 44100;
-        ss.channels = 2;
-
-        audioData.inputStream = pa_stream_new(context, "capture", &ss, nullptr);
-        pa_stream_set_read_callback(audioData.inputStream, stream_read_callback, &audioData);
-        pa_stream_connect_record(audioData.inputStream, monitorName.c_str(), nullptr, PA_STREAM_ADJUST_LATENCY);
-
-        audioData.outputStream = pa_stream_new(context, "playback", &ss, nullptr);
-        pa_stream_connect_playback(audioData.outputStream, nullptr, nullptr, PA_STREAM_ADJUST_LATENCY, nullptr, nullptr);
+        if (sinkIndex != PA_INVALID_INDEX) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "alsa_output.%u.monitor", sinkIndex);
+            monitorName = buf;
+        }
+        pa_stream_connect_record(inputStream, monitorName.c_str(), nullptr,
+                                PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0));
+        pa_stream_connect_playback(outputStream, nullptr, nullptr,
+                                PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0), nullptr, nullptr);
 
         while (!stop_audio.load()) {
             pa_mainloop_iterate(mainloop, 1, nullptr);
+            if (audioData.captureBuffer.empty()) continue;
+
+            float* resampled = nullptr;
+            size_t outFrames = audioData.captureBuffer.size() / audioData.inputChannels;
+            bool needResample = (audioData.inputRate != audioData.outputRate) || (audioData.inputChannels != audioData.outputChannels);
+
+            if (needResample) {
+                resampled = linear_resample_interleaved(audioData.captureBuffer.data(), outFrames, audioData.inputChannels, audioData.inputRate,
+                                                        audioData.outputRate, &outFrames);
+                if (audioData.inputChannels != audioData.outputChannels)
+                    resampled = remap_channels_interleaved(resampled, outFrames, audioData.inputChannels, audioData.outputChannels);
+            } else {
+                resampled = audioData.captureBuffer.data();
+            }
+
+            size_t framesLeft = outFrames;
+            size_t frameIdx = 0;
+            while (framesLeft > 0) {
+                size_t chunkFrames = std::min<size_t>(framesLeft, low_latency ? 2048 : 8192);
+                pa_stream_write(outputStream, resampled + frameIdx * audioData.outputChannels, chunkFrames * audioData.outputChannels * sizeof(float),
+                    nullptr, 0, PA_SEEK_RELATIVE);
+                framesLeft -= chunkFrames;
+                frameIdx += chunkFrames;
+            }
+
+            if (needResample && resampled != audioData.captureBuffer.data())
+                delete[] resampled;
+
+            audioData.captureBuffer.clear();
         }
 
-        pa_stream_disconnect(audioData.inputStream);
-        pa_stream_disconnect(audioData.outputStream);
-        pa_stream_unref(audioData.inputStream);
-        pa_stream_unref(audioData.outputStream);
+        pa_stream_disconnect(inputStream);
+        pa_stream_disconnect(outputStream);
+        pa_stream_unref(inputStream);
+        pa_stream_unref(outputStream);
         pa_context_disconnect(context);
         pa_context_unref(context);
         pa_mainloop_free(mainloop);
         #endif
     }
+    #pragma endregion
 }
