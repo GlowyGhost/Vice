@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: sudo apt update && sudo apt install -y build-essential
 
-      - name: Install C/C++ compiler (Windows)
+      - name: Install C++ compiler (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -112,11 +112,19 @@ jobs:
           cd src-tauri/target/debug
           mv Vice Vice-debug
 
-      - name: Upload debug build
+      - name: Upload debug build (Windows)
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: debug-${{ matrix.os }}
-          path: src-tauri/target/debug/*.exe
+          path: src-tauri/target/debug/Vice-debug.exe
+
+      - name: Upload debug build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-${{ matrix.os }}
+          path: src-tauri/target/debug/Vice-debug
 
   app:
     name: Build Tauri App
@@ -173,7 +181,7 @@ jobs:
         shell: bash
         run: sudo apt update && sudo apt install -y build-essential
 
-      - name: Install C/C++ compiler (Windows)
+      - name: Install C++ compiler (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
@@ -186,12 +194,20 @@ jobs:
           cd src-tauri
           cargo build --release
 
-      - name: Upload release build
+      - name: Upload release build (Windows)
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
-          path: src-tauri/target/release/*.exe
-  
+          path: src-tauri/target/release/Vice.exe
+        
+      - name: Upload release build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: src-tauri/target/release/Vice
+
   zip:
     name: Zip Artifacts
     runs-on: ${{ matrix.os }}
