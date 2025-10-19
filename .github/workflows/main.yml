@@ -250,11 +250,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cd src-tauri/target/release
+          cd temp
           Compress-Archive -Path Vice.exe, Vice-debug.exe, ../LICENSE -DestinationPath windows.zip -Force
 
       - name: Upload final zip
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}
-          path: src-tauri/target/release/*.zip
+          path: temp/*.zip
