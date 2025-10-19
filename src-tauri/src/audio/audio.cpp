@@ -1336,12 +1336,14 @@ extern "C" {
             auto check_and_move_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* u) {
                 if (eol > 0) return;
                 auto md = (MoveData*)u;
-                if (i && i->sink != md->desiredSink) {
-                    pa_context_move_sink_input_by_index(c, md->sinkInputIndex, md->desiredSink, nullptr, nullptr);
+                if (i && i->index == md->sinkInputIndex) {
+                    if (i->sink != md->desiredSink) {
+                        pa_context_move_sink_input_by_index(c, md->sinkInputIndex, md->desiredSink, nullptr, nullptr);
+                    }
                 }
             };
 
-            pa_context_get_sink_info_by_index(context, userdata.sinkInputIndex, check_and_move_cb, &moveData);
+            pa_context_get_sink_input_info_list(context, check_and_move_cb, &moveData);
             pa_mainloop_iterate(mainloop, 1, nullptr);
         }
 
