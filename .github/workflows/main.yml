@@ -193,7 +193,7 @@ jobs:
           path: src-tauri/target/release/*.exe
   
   zip:
-    name: Build Tauri App
+    name: Zip Artifacts
     runs-on: ${{ matrix.os }}
     needs: [debug, app]
     strategy:

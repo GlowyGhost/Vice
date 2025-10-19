@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <chrono>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -28,6 +29,7 @@
 #include <pulse/pulseaudio.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
+#include <cstring>
 #endif
 #pragma endregion
 
@@ -36,6 +38,7 @@ static std::vector<const char*> c_strs;
 static std::vector<std::unique_ptr<char[]>> c_copies;
 
 #pragma region Helpers
+#ifdef _WIN32
 std::string wideToUtf8(const wchar_t* wstr) {
     if (!wstr) return {};
 
@@ -46,6 +49,7 @@ std::string wideToUtf8(const wchar_t* wstr) {
     WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &str[0], size_needed, nullptr, nullptr);
     return str;
 }
+#endif
 
 struct WAVData {
     char* buffer = nullptr;
@@ -101,32 +105,6 @@ float* int16_to_float(const int16_t* data, size_t frames, int channels) {
     return out;
 }
 
-float* linear_resample_interleaved(const float* src, size_t srcFrames, int channels, int srcRate, int dstRate, size_t* outFrames) {
-    *outFrames = srcFrames * dstRate / srcRate;
-    float* out = new float[*outFrames * channels];
-    for (size_t i = 0; i < *outFrames; ++i) {
-        float srcPos = i * float(srcFrames) / (*outFrames);
-        size_t idx = size_t(srcPos);
-        float frac = srcPos - idx;
-        for (int c = 0; c < channels; ++c) {
-            float s0 = (idx < srcFrames) ? src[idx * channels + c] : 0.f;
-            float s1 = (idx + 1 < srcFrames) ? src[(idx + 1) * channels + c] : 0.f;
-            out[i * channels + c] = s0 * (1 - frac) + s1 * frac;
-        }
-    }
-    return out;
-}
-
-float* remap_channels_interleaved(const float* src, size_t frames, int srcCh, int dstCh) {
-    float* out = new float[frames * dstCh];
-    for (size_t f = 0; f < frames; ++f) {
-        for (int c = 0; c < dstCh; ++c) {
-            out[f * dstCh + c] = src[f * srcCh + (c % srcCh)];
-        }
-    }
-    return out;
-}
-
 bool is_format_float(WAVEFORMATEX* wf) {
     if (!wf) return false;
     if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) return true;
@@ -157,6 +135,32 @@ snd_pcm_format_t get_alsa_format(int bitsPerSample, bool isFloat) {
     return SND_PCM_FORMAT_UNKNOWN;
 }
 #endif
+
+float* linear_resample_interleaved(const float* src, size_t srcFrames, int channels, int srcRate, int dstRate, size_t* outFrames) {
+    *outFrames = srcFrames * dstRate / srcRate;
+    float* out = new float[*outFrames * channels];
+    for (size_t i = 0; i < *outFrames; ++i) {
+        float srcPos = i * float(srcFrames) / (*outFrames);
+        size_t idx = size_t(srcPos);
+        float frac = srcPos - idx;
+        for (int c = 0; c < channels; ++c) {
+            float s0 = (idx < srcFrames) ? src[idx * channels + c] : 0.f;
+            float s1 = (idx + 1 < srcFrames) ? src[(idx + 1) * channels + c] : 0.f;
+            out[i * channels + c] = s0 * (1 - frac) + s1 * frac;
+        }
+    }
+    return out;
+}
+
+float* remap_channels_interleaved(const float* src, size_t frames, int srcCh, int dstCh) {
+    float* out = new float[frames * dstCh];
+    for (size_t f = 0; f < frames; ++f) {
+        for (int c = 0; c < dstCh; ++c) {
+            out[f * dstCh + c] = src[f * srcCh + (c % srcCh)];
+        }
+    }
+    return out;
+}
 
 #ifdef _WIN32
 IMMDevice* find_device_by_name(EDataFlow flow, const char* name) {
@@ -242,7 +246,7 @@ bool isValidName(const std::string& name) {
 
 void clear_statics() {
     std::thread([]() mutable {
-        Sleep(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         storage.clear();
         c_strs.clear();
         c_copies.clear();
@@ -747,7 +751,7 @@ extern "C" {
         snd_pcm_hw_params(handle, params);
         snd_pcm_hw_params_free(params);
 
-        std::thread([handle, wav, format]() {
+        std::thread([handle, wav, format, low_latency]() {
             const void* data = wav.buffer;
             size_t frameSize = wav.channels * ((format == SND_PCM_FORMAT_S16_LE) ? 2 : (format == SND_PCM_FORMAT_S32_LE || format == SND_PCM_FORMAT_FLOAT_LE) ? 4 : 0);
             size_t totalFrames = wav.bufferSize / frameSize;
@@ -970,7 +974,7 @@ extern "C" {
         captureSpec.rate = 48000;
 
         pipe.captureStream = pa_stream_new(pipe.context, "Capture", &captureSpec, nullptr);
-        pa_stream_connect_record(pipe.captureStream, input ? input : "default", nullptr, PA_STREAM_ADJUST_LATENCY | PA_STREAM_INTERPOLATE_TIMING);
+        pa_stream_connect_record(pipe.captureStream, input ? input : "default", nullptr, (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | PA_STREAM_INTERPOLATE_TIMING));
 
         pa_sample_spec playbackSpec;
         playbackSpec.format = PA_SAMPLE_FLOAT32LE;
@@ -1287,7 +1291,7 @@ extern "C" {
             const char* targetApp;
             uint32_t sinkInputIndex;
             bool found;
-        } userdata{ inputApp, PA_INVALID_INDEX, false };
+        } userdata{ input, PA_INVALID_INDEX, false };
 
         auto sink_input_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* userdata) {
             if (eol > 0) return;
@@ -1302,7 +1306,7 @@ extern "C" {
         pa_mainloop_iterate(mainloop, 1, nullptr);
 
         if (!userdata.found) {
-            std::cerr << "Target app not found: " << inputApp << "\n";
+            std::cerr << "Target app not found: " << input << "\n";
             pa_context_disconnect(context);
             pa_context_unref(context);
             pa_mainloop_free(mainloop);
@@ -1310,8 +1314,8 @@ extern "C" {
         }
 
         uint32_t sinkIndex = PA_INVALID_INDEX;
-        if (outputSink) {
-            struct OutputData { const char* name; uint32_t idx; } outdata{ outputSink, PA_INVALID_INDEX };
+        if (output) {
+            struct OutputData { const char* name; uint32_t idx; } outdata{ output, PA_INVALID_INDEX };
             auto sink_cb = [](pa_context* c, const pa_sink_info* i, int eol, void* userdata) {
                 if (eol > 0) return;
                 auto od = (OutputData*)userdata;
@@ -1323,8 +1327,23 @@ extern "C" {
             sinkIndex = outdata.idx;
         }
 
-        if (sinkIndex != PA_INVALID_INDEX && sinkIndex != pa_sink_input_info_get_index(context, userdata.sinkInputIndex))
-            pa_context_move_sink_input_by_index(context, userdata.sinkInputIndex, sinkIndex);
+        if (sinkIndex != PA_INVALID_INDEX) {
+            struct MoveData {
+                uint32_t sinkInputIndex;
+                uint32_t desiredSink;
+            } moveData{ userdata.sinkInputIndex, sinkIndex };
+
+            auto check_and_move_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* u) {
+                if (eol > 0) return;
+                auto md = (MoveData*)u;
+                if (i && i->sink != md->desiredSink) {
+                    pa_context_move_sink_input_by_index(c, md->sinkInputIndex, md->desiredSink, nullptr, nullptr);
+                }
+            };
+
+            pa_context_get_sink_input_info_by_index(context, userdata.sinkInputIndex, check_and_move_cb, &moveData);
+            pa_mainloop_iterate(mainloop, 1, nullptr);
+        }
 
         pa_sample_spec appSpec{};
         appSpec.format = PA_SAMPLE_FLOAT32LE;
@@ -1365,9 +1384,9 @@ extern "C" {
             monitorName = buf;
         }
         pa_stream_connect_record(inputStream, monitorName.c_str(), nullptr,
-                                PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0));
+            (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)));
         pa_stream_connect_playback(outputStream, nullptr, nullptr,
-                                PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0), nullptr, nullptr);
+            (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)), nullptr, nullptr);
 
         while (!stop_audio.load()) {
             pa_mainloop_iterate(mainloop, 1, nullptr);
