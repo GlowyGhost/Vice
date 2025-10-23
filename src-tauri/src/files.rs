@@ -36,13 +36,12 @@ pub(crate) struct Settings {
 
 fn app_base() -> PathBuf {
     #[cfg(target_os = "windows")]
-    let base = env::var("APPDATA");
+    let base = env::var("APPDATA").unwrap_or("Error occured when getting App Base".to_string());
     #[cfg(target_os = "linux")]
-    let base = env::var("XDG_DATA_HOME");
+    let base = env::var("XDG_DATA_HOME")
+        .unwrap_or_else(|_| format!("{}/.local/share", env::var("HOME").unwrap_or_else(|_| "/tmp".into())));
     
-    PathBuf::from(
-        base.unwrap_or("Error occured when getting App Base".to_string())
-    ).join("Vice")
+    PathBuf::from(base).join("Vice")
 }
 
 fn settings_json() -> PathBuf {

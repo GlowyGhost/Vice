@@ -30,6 +30,7 @@
 #include <pulse/simple.h>
 #include <pulse/error.h>
 #include <cstring>
+#include <mutex>
 #endif
 #pragma endregion
 
@@ -134,6 +135,37 @@ snd_pcm_format_t get_alsa_format(int bitsPerSample, bool isFloat) {
     }
     return SND_PCM_FORMAT_UNKNOWN;
 }
+
+std::string format_alsa_hint(const char* name, const char* desc) {
+    if (desc && *desc) {
+        std::string s(desc);
+        while (!s.empty() && std::isspace((unsigned char)s.front())) s.erase(s.begin());
+        while (!s.empty() && std::isspace((unsigned char)s.back())) s.pop_back();
+        return s;
+    }
+    if (!name) return std::string();
+
+    std::string s(name);
+    const std::vector<std::string> prefixes = {"plughw:", "hw:", "sysdefault:", "default:"};
+    for (const auto& p : prefixes) {
+        if (s.rfind(p, 0) == 0) { s = s.substr(p.size()); break; }
+    }
+
+    std::string tmp;
+    bool prevSpace = false;
+    for (char ch : s) {
+        if (ch == ',' || ch == '_' || ch == ':' || std::isspace((unsigned char)ch)) {
+            if (!prevSpace) { tmp.push_back(' '); prevSpace = true; }
+        } else {
+            tmp.push_back(ch);
+            prevSpace = false;
+        }
+    }
+    if (!tmp.empty() && tmp.front() == ' ') tmp.erase(tmp.begin());
+    if (!tmp.empty() && tmp.back() == ' ') tmp.pop_back();
+
+    return tmp.empty() ? s : tmp;
+}
 #endif
 
 float* linear_resample_interleaved(const float* src, size_t srcFrames, int channels, int srcRate, int dstRate, size_t* outFrames) {
@@ -225,6 +257,120 @@ void stream_read_callback(pa_stream* s, size_t length, void* userdata) {
 
     pa_stream_drop(s);
 }
+
+snd_pcm_t* find_device_by_name(bool output, const char* display_name) {
+    void **hints;
+    snd_pcm_t* handle = nullptr;
+
+    if (snd_device_name_hint(-1, "pcm", &hints) < 0)
+        return nullptr;
+
+    std::string device_name;
+
+    for (void **n = hints; *n != nullptr; ++n) {
+        char *name = snd_device_name_get_hint(*n, "NAME");
+        char *desc = snd_device_name_get_hint(*n, "DESC");
+        char *ioid = snd_device_name_get_hint(*n, "IOID");
+
+        bool is_output = (!ioid || strcmp(ioid, "Output") == 0);
+        if (is_output == output) {
+            std::string display = format_alsa_hint(name, desc);
+            if (!display.empty() && display == display_name) {
+                if (name)
+                    device_name = name;
+            }
+        }
+
+        if (name) free(name);
+        if (desc) free(desc);
+        if (ioid) free(ioid);
+
+        if (!device_name.empty())
+            break;
+    }
+
+    snd_device_name_free_hint(hints);
+
+    const char* alsa_device = device_name.empty() ? "default" : device_name.c_str();
+
+    snd_pcm_open(&handle, alsa_device, output ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0);
+
+    return handle;
+}
+
+std::string find_pa_device_by_name(pa_context* ctx, bool output, const char* display_name) {
+    if (!ctx) return "default";
+
+    struct DeviceSearch {
+        std::string wanted;
+        std::string found;
+        bool done = false;
+    } data{ display_name ? display_name : "default", "" };
+
+    auto sink_cb = [](pa_context*, const pa_sink_info* i, int eol, void* userdata) {
+        if (eol > 0) return;
+        auto* d = (DeviceSearch*)userdata;
+        if (!i || d->done) return;
+
+        if (i->description && d->wanted == i->description) {
+            d->found = i->name;
+            d->done = true;
+        }
+    };
+
+    auto source_cb = [](pa_context*, const pa_source_info* i, int eol, void* userdata) {
+        if (eol > 0) return;
+        auto* d = (DeviceSearch*)userdata;
+        if (!i || d->done) return;
+
+        if (i->description && d->wanted == i->description) {
+            d->found = i->name;
+            d->done = true;
+        }
+    };
+
+    pa_mainloop* loop = pa_mainloop_new();
+    if (!loop) return "default";
+
+    bool created_context = false;
+    if (pa_context_get_state(ctx) != PA_CONTEXT_READY) {
+        ctx = pa_context_new(pa_mainloop_get_api(loop), "find_device");
+        pa_context_connect(ctx, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+
+        while (true) {
+            pa_mainloop_iterate(loop, 1, nullptr);
+            auto st = pa_context_get_state(ctx);
+            if (st == PA_CONTEXT_READY) break;
+            if (!PA_CONTEXT_IS_GOOD(st)) {
+                pa_context_unref(ctx);
+                pa_mainloop_free(loop);
+                return "default";
+            }
+        }
+        created_context = true;
+    }
+
+    if (output)
+        pa_context_get_sink_info_list(ctx, sink_cb, &data);
+    else
+        pa_context_get_source_info_list(ctx, source_cb, &data);
+
+    int tries = 100;
+    while (!data.done && tries-- > 0) {
+        pa_mainloop_iterate(loop, 1, nullptr);
+    }
+
+    if (created_context) {
+        pa_context_disconnect(ctx);
+        pa_context_unref(ctx);
+    }
+    pa_mainloop_free(loop);
+
+    if (data.found.empty())
+        data.found = "default";
+
+    return data.found;
+}
 #endif
 
 bool isValidName(const std::string& name) {
@@ -305,14 +451,22 @@ extern "C" {
 
         for (void **n = hints; *n != nullptr; n++) {
             char *name = snd_device_name_get_hint(*n, "NAME");
+            char *desc = snd_device_name_get_hint(*n, "DESC");
             char *ioid = snd_device_name_get_hint(*n, "IOID");
 
             if (!ioid || strcmp(ioid, "Output") == 0) {
-                storage.emplace_back(name);
-                c_strs.push_back(storage.back().c_str());
+                std::string display = format_alsa_hint(name, desc);
+                if (!display.empty() && isValidName(display)) {
+                    storage.emplace_back(display);
+                    c_strs.push_back(storage.back().c_str());
+                } else if (name && isValidName(name)) {
+                    storage.emplace_back(name);
+                    c_strs.push_back(storage.back().c_str());
+                }
             }
 
             if (name) free(name);
+            if (desc) free(desc);
             if (ioid) free(ioid);
         }
         snd_device_name_free_hint(hints);
@@ -370,14 +524,22 @@ extern "C" {
 
         for (void **n = hints; *n != nullptr; n++) {
             char *name = snd_device_name_get_hint(*n, "NAME");
+            char *desc = snd_device_name_get_hint(*n, "DESC");
             char *ioid = snd_device_name_get_hint(*n, "IOID");
 
             if (!ioid || strcmp(ioid, "Input") == 0) {
-                storage.emplace_back(name);
-                c_strs.push_back(storage.back().c_str());
+                std::string display = format_alsa_hint(name, desc);
+                if (!display.empty() && isValidName(display)) {
+                    storage.emplace_back(display);
+                    c_strs.push_back(storage.back().c_str());
+                } else if (name && isValidName(name)) {
+                    storage.emplace_back(name);
+                    c_strs.push_back(storage.back().c_str());
+                }
             }
 
             if (name) free(name);
+            if (desc) free(desc);
             if (ioid) free(ioid);
         }
         snd_device_name_free_hint(hints);
@@ -710,12 +872,7 @@ extern "C" {
 
         targetDevice->Release();
         #else
-        const char* alsa_device = (device_name && strlen(device_name) > 0) ? device_name : "default";
-        snd_pcm_t* handle;
-        if (snd_pcm_open(&handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0) < 0) {
-            std::cerr << "Cannot open ALSA device\n";
-            return;
-        }
+        snd_pcm_t* handle = find_device_by_name(true, device_name);
 
         snd_pcm_hw_params_t* params;
         snd_pcm_hw_params_malloc(&params);
@@ -772,7 +929,7 @@ extern "C" {
         #endif
     }
     #pragma endregion
-    #pragma region Device to Device Pipe
+    #pragma region Device to Device
     void device_to_device(const char* input, const char* output, bool low_latency) {
         #ifdef _WIN32
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -947,13 +1104,14 @@ extern "C" {
             unsigned playbackChannels = 0;
             unsigned captureRate = 0;
             unsigned playbackRate = 0;
+            std::atomic<bool> haveData{false};
+            std::mutex mutex;
         };
 
         PADevicePipe pipe;
 
         pipe.mainloop = pa_mainloop_new();
         pipe.context = pa_context_new(pa_mainloop_get_api(pipe.mainloop), "DevicePipe");
-
         pa_context_connect(pipe.context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
 
         while (true) {
@@ -968,74 +1126,104 @@ extern "C" {
             pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
         }
 
-        pa_sample_spec captureSpec;
-        captureSpec.format = PA_SAMPLE_FLOAT32LE;
-        captureSpec.channels = 2;
-        captureSpec.rate = 48000;
+        std::string input_device  = find_pa_device_by_name(pipe.context, false, input);
+        std::string output_device = find_pa_device_by_name(pipe.context, true,  output);
 
-        pipe.captureStream = pa_stream_new(pipe.context, "Capture", &captureSpec, nullptr);
-        pa_stream_connect_record(pipe.captureStream, input ? input : "default", nullptr, (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | PA_STREAM_INTERPOLATE_TIMING));
+        pa_sample_spec spec{};
+        spec.format = PA_SAMPLE_FLOAT32LE;
+        spec.channels = 2;
+        spec.rate = low_latency ? 48000 : 44100;
 
-        pa_sample_spec playbackSpec;
-        playbackSpec.format = PA_SAMPLE_FLOAT32LE;
-        playbackSpec.channels = 2;
-        playbackSpec.rate = 48000;
+        pipe.captureStream = pa_stream_new(pipe.context, "device_capture", &spec, nullptr);
+        pipe.playbackStream = pa_stream_new(pipe.context, "device_playback", &spec, nullptr);
 
-        pipe.playbackStream = pa_stream_new(pipe.context, "Playback", &playbackSpec, nullptr);
-        pa_stream_connect_playback(pipe.playbackStream, output ? output : "default",
-                                nullptr, PA_STREAM_INTERPOLATE_TIMING, nullptr, nullptr);
+        auto capture_read_cb = [](pa_stream* s, size_t nbytes, void* userdata) {
+            auto* p = reinterpret_cast<PADevicePipe*>(userdata);
+            const void* ptr = nullptr;
+            if (pa_stream_peek(s, &ptr, &nbytes) < 0 || !ptr || nbytes == 0) return;
+
+            const float* fptr = reinterpret_cast<const float*>(ptr);
+            size_t frames = nbytes / (sizeof(float) * p->captureChannels);
+            std::lock_guard<std::mutex> lk(p->mutex);
+            size_t old = p->captureBuffer.size();
+            p->captureBuffer.resize(old + frames * p->captureChannels);
+            memcpy(p->captureBuffer.data() + old, fptr, nbytes);
+            p->haveData = true;
+            pa_stream_drop(s);
+        };
+
+        pa_stream_set_read_callback(pipe.captureStream, capture_read_cb, &pipe);
+
+        pa_stream_connect_record(pipe.captureStream, input_device.c_str(), nullptr,
+            (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)));
+
+        pa_stream_connect_playback(pipe.playbackStream, output_device.c_str(), nullptr,
+            (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)), nullptr, nullptr);
 
         while (pa_stream_get_state(pipe.captureStream) != PA_STREAM_READY ||
-            pa_stream_get_state(pipe.playbackStream) != PA_STREAM_READY) {
+               pa_stream_get_state(pipe.playbackStream) != PA_STREAM_READY) {
             pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
         }
 
-        pipe.captureChannels = captureSpec.channels;
-        pipe.playbackChannels = playbackSpec.channels;
-        pipe.captureRate = captureSpec.rate;
-        pipe.playbackRate = playbackSpec.rate;
+        const pa_sample_spec* capSpec = pa_stream_get_sample_spec(pipe.captureStream);
+        const pa_sample_spec* playSpec = pa_stream_get_sample_spec(pipe.playbackStream);
+        if (capSpec) { pipe.captureChannels = capSpec->channels; pipe.captureRate = capSpec->rate; }
+        else { pipe.captureChannels = spec.channels; pipe.captureRate = spec.rate; }
+        if (playSpec) { pipe.playbackChannels = playSpec->channels; pipe.playbackRate = playSpec->rate; }
+        else { pipe.playbackChannels = spec.channels; pipe.playbackRate = spec.rate; }
 
-        size_t maxFrames = low_latency ? 2048 : 8192;
-        pipe.captureBuffer.resize(maxFrames * pipe.captureChannels);
-        pipe.playbackBuffer.resize(maxFrames * pipe.playbackChannels);
+        size_t maxFrames = low_latency ? 8192 : 32768;
+        pipe.captureBuffer.reserve(maxFrames * pipe.captureChannels);
 
         while (!stop_audio.load()) {
-            const void* data = nullptr;
-            size_t frames = 0;
-            if (pa_stream_peek(pipe.captureStream, &data, &frames) < 0 || frames == 0) {
-                pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
+            pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
+
+            if (!pipe.haveData.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
 
-            const float* in = reinterpret_cast<const float*>(data);
-            std::vector<float> floatData(frames * pipe.captureChannels);
-            memcpy(floatData.data(), in, frames * pipe.captureChannels * sizeof(float));
+            std::vector<float> localBuffer;
+            {
+                std::lock_guard<std::mutex> lk(pipe.mutex);
+                if (pipe.captureBuffer.empty()) { pipe.haveData = false; continue; }
+                localBuffer.swap(pipe.captureBuffer);
+                pipe.haveData = false;
+            }
 
-            pa_stream_drop(pipe.captureStream);
-
+            size_t inFrames = localBuffer.size() / pipe.captureChannels;
             float* toRender = nullptr;
             size_t outFrames = 0;
+            bool needResample = (pipe.captureRate != pipe.playbackRate) || (pipe.captureChannels != pipe.playbackChannels);
 
-            if (pipe.captureRate != pipe.playbackRate || pipe.captureChannels != pipe.playbackChannels) {
-                float* resampled = linear_resample_interleaved(floatData.data(), frames, pipe.captureChannels, pipe.captureRate, pipe.playbackRate, &outFrames);
-                float* remapped = remap_channels_interleaved(resampled, outFrames, pipe.captureChannels, pipe.playbackChannels);
-                delete[] resampled;
-                toRender = remapped;
+            if (needResample) {
+                float* resampled = linear_resample_interleaved(localBuffer.data(), inFrames, pipe.captureChannels, pipe.captureRate, pipe.playbackRate, &outFrames);
+                if (pipe.captureChannels != pipe.playbackChannels) {
+                    float* remapped = remap_channels_interleaved(resampled, outFrames, pipe.captureChannels, pipe.playbackChannels);
+                    delete[] resampled;
+                    toRender = remapped;
+                } else {
+                    toRender = resampled;
+                }
             } else {
-                toRender = floatData.data();
-                outFrames = frames;
+                toRender = localBuffer.data();
+                outFrames = inFrames;
             }
 
-            size_t written = 0;
-            while (written < outFrames && !stop_audio.load()) {
-                size_t toWrite = std::min(static_cast<size_t>(1024), outFrames - written);
-                pa_stream_write(pipe.playbackStream, toRender + written * pipe.playbackChannels, toWrite * pipe.playbackChannels * sizeof(float),
-                    nullptr, 0LL, PA_SEEK_RELATIVE);
-                written += toWrite;
-                pa_mainloop_iterate(pipe.mainloop, 0, nullptr);
+            size_t writtenFrames = 0;
+            while (writtenFrames < outFrames && !stop_audio.load()) {
+                size_t chunk = std::min<size_t>(outFrames - writtenFrames, low_latency ? 2048 : 8192);
+                int res = pa_stream_write(pipe.playbackStream, toRender + writtenFrames * pipe.playbackChannels,
+                    chunk * pipe.playbackChannels * sizeof(float), nullptr, 0LL, PA_SEEK_RELATIVE);
+                if (res < 0) {
+                    pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
+                } else {
+                    writtenFrames += chunk;
+                }
             }
 
-            if (toRender != floatData.data()) delete[] toRender;
+            if (needResample && toRender != localBuffer.data())
+                delete[] toRender;
         }
 
         pa_stream_disconnect(pipe.captureStream);
@@ -1048,7 +1236,7 @@ extern "C" {
         #endif
     }
     #pragma endregion
-    #pragma region App to Device Pipe
+    #pragma region App to Device
     void app_to_device(const char* input, const char* output, bool low_latency) {
         #ifdef _WIN32
         CoInitialize(nullptr);
@@ -1069,11 +1257,14 @@ extern "C" {
             } while (Process32NextW(hSnap, &pe32));
         }
         CloseHandle(hSnap);
-        if (!targetPid) { std::cerr << "Process not found: " << input << "\n"; CoUninitialize(); return; }
+        if (!targetPid) {
+            std::cerr << "Process not found: " << input << "\n";
+            CoUninitialize();
+            return;
+        }
 
         IMMDeviceEnumerator* pEnum = nullptr;
-        CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                        __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+        CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
 
         IMMDevice* renderDevice = nullptr;
         if (output && strlen(output) > 0)
@@ -1171,9 +1362,9 @@ extern "C" {
         bool captureIsFloat = is_format_float(wfCapture);
         bool renderIsFloat  = is_format_float(wfRender);
         bool needResample = (wfCapture->nChannels != wfRender->nChannels)
-                        || (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec)
-                        || (captureIsFloat != renderIsFloat)
-                        || (wfCapture->wBitsPerSample != wfRender->wBitsPerSample);
+            || (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec)
+            || (captureIsFloat != renderIsFloat)
+            || (wfCapture->wBitsPerSample != wfRender->wBitsPerSample);
 
         const UINT32 renderBytesPerFrame = wfRender->nChannels * (wfRender->wBitsPerSample / 8);
 
@@ -1287,23 +1478,36 @@ extern "C" {
             return;
         }
 
+        std::string output_device = find_pa_device_by_name(context, true, output);
+
         struct UserData {
             const char* targetApp;
             uint32_t sinkInputIndex;
+            uint32_t sinkIndex;
             bool found;
-        } userdata{ input, PA_INVALID_INDEX, false };
+        } userdata{ input, PA_INVALID_INDEX, PA_INVALID_INDEX, false };
 
-        auto sink_input_cb = [](pa_context* _c, const pa_sink_input_info* i, int eol, void* userdata) {
+        auto sink_input_cb = [](pa_context*, const pa_sink_input_info* i, int eol, void* userdata) {
             if (eol > 0) return;
-            auto ud = (UserData*)userdata;
+            auto* ud = reinterpret_cast<UserData*>(userdata);
+            if (!i || ud->found) return;
+            const char* proc = pa_proplist_gets(i->proplist, PA_PROP_APPLICATION_PROCESS_BINARY);
             const char* name = pa_proplist_gets(i->proplist, PA_PROP_APPLICATION_NAME);
-            if (name && strcmp(name, ud->targetApp) == 0) {
+            if (proc && strcmp(proc, ud->targetApp) == 0) {
                 ud->sinkInputIndex = i->index;
+                ud->sinkIndex = i->sink;
+                ud->found = true;
+            } else if (name && strcmp(name, ud->targetApp) == 0) {
+                ud->sinkInputIndex = i->index;
+                ud->sinkIndex = i->sink;
                 ud->found = true;
             }
         };
+
         pa_context_get_sink_input_info_list(context, sink_input_cb, &userdata);
-        pa_mainloop_iterate(mainloop, 1, nullptr);
+
+        int tries = 100;
+        while (!userdata.found && tries-- > 0) pa_mainloop_iterate(mainloop, 1, nullptr);
 
         if (!userdata.found) {
             std::cerr << "Target app not found: " << input << "\n";
@@ -1313,38 +1517,27 @@ extern "C" {
             return;
         }
 
-        uint32_t sinkIndex = PA_INVALID_INDEX;
-        if (output) {
-            struct OutputData { const char* name; uint32_t idx; } outdata{ output, PA_INVALID_INDEX };
-            auto sink_cb = [](pa_context* _c, const pa_sink_info* i, int eol, void* userdata) {
-                if (eol > 0) return;
-                auto od = (OutputData*)userdata;
-                if (i->description && strcmp(i->description, od->name) == 0)
-                    od->idx = i->index;
-            };
-            pa_context_get_sink_info_list(context, sink_cb, &outdata);
-            pa_mainloop_iterate(mainloop, 1, nullptr);
-            sinkIndex = outdata.idx;
+        std::string monitorName = "";
+        if (userdata.sinkIndex != PA_INVALID_INDEX) {
+            struct SinkInfoData { std::string monitor; bool done = false; uint32_t idx; };
+            SinkInfoData sid{ "", false, userdata.sinkIndex };
+
+            pa_context_get_sink_info_by_index(context, userdata.sinkIndex,
+                [](pa_context*, const pa_sink_info* info, int eol, void* userdata) {
+                    if (eol > 0) return;
+                    auto* d = reinterpret_cast<SinkInfoData*>(userdata);
+                    if (info && info->monitor_source)
+                        d->monitor = info->monitor_source;
+                    d->done = true;
+                }, &sid);
+
+            int w = 100;
+            while (!sid.done && w-- > 0) pa_mainloop_iterate(mainloop, 1, nullptr);
+            if (!sid.monitor.empty()) monitorName = sid.monitor;
         }
 
-        if (sinkIndex != PA_INVALID_INDEX) {
-            struct MoveData {
-                uint32_t sinkInputIndex;
-                uint32_t desiredSink;
-            } moveData{ userdata.sinkInputIndex, sinkIndex };
-
-            auto check_and_move_cb = [](pa_context* c, const pa_sink_input_info* i, int eol, void* u) {
-                if (eol > 0) return;
-                auto md = (MoveData*)u;
-                if (i && i->index == md->sinkInputIndex) {
-                    if (i->sink != md->desiredSink) {
-                        pa_context_move_sink_input_by_index(c, md->sinkInputIndex, md->desiredSink, nullptr, nullptr);
-                    }
-                }
-            };
-
-            pa_context_get_sink_input_info_list(context, check_and_move_cb, &moveData);
-            pa_mainloop_iterate(mainloop, 1, nullptr);
+        if (monitorName.empty()) {
+            monitorName = "@DEFAULT_MONITOR@";
         }
 
         pa_sample_spec appSpec{};
@@ -1352,7 +1545,7 @@ extern "C" {
         appSpec.rate = low_latency ? 48000 : 44100;
         appSpec.channels = 2;
 
-        pa_stream* inputStream = pa_stream_new(context, "capture", &appSpec, nullptr);
+        pa_stream* inputStream = pa_stream_new(context, "app_capture", &appSpec, nullptr);
         pa_stream* outputStream = pa_stream_new(context, "playback", &appSpec, nullptr);
 
         struct AudioData {
@@ -1360,67 +1553,90 @@ extern "C" {
             pa_stream* inputStream;
             pa_stream* outputStream;
             std::vector<float> captureBuffer;
-            std::vector<float> outBuffer;
             unsigned int inputChannels;
             unsigned int outputChannels;
             unsigned int inputRate;
             unsigned int outputRate;
-        } audioData{ mainloop, inputStream, outputStream };
+            std::mutex mutex;
+            std::atomic<bool> haveData{false};
+        } audioData{ mainloop, inputStream, outputStream, std::vector<float>(), (unsigned)appSpec.channels, (unsigned)appSpec.channels, (unsigned)appSpec.rate, (unsigned)appSpec.rate };
 
-        auto stream_read_cb = [](pa_stream* s, size_t length, void* userdata) {
-            auto data = (AudioData*)userdata;
-            const void* ptr;
-            if (pa_stream_peek(s, &ptr, &length) < 0 || !ptr) return;
+        auto stream_read_cb = [](pa_stream* s, size_t nbytes, void* userdata) {
+            auto* data = reinterpret_cast<AudioData*>(userdata);
+            const void* ptr = nullptr;
+            if (pa_stream_peek(s, &ptr, &nbytes) < 0 || !ptr || nbytes == 0) return;
 
-            size_t frames = length / (sizeof(float) * data->inputChannels);
-            data->captureBuffer.resize(frames * data->inputChannels);
-            memcpy(data->captureBuffer.data(), ptr, length);
+            size_t frames = nbytes / (sizeof(float) * data->inputChannels);
+            std::lock_guard<std::mutex> lk(data->mutex);
+            size_t old = data->captureBuffer.size();
+            data->captureBuffer.resize(old + frames * data->inputChannels);
+            memcpy(data->captureBuffer.data() + old, ptr, nbytes);
+            data->haveData = true;
             pa_stream_drop(s);
         };
+
         pa_stream_set_read_callback(inputStream, stream_read_cb, &audioData);
 
-        std::string monitorName = "@DEFAULT_MONITOR@";
-        if (sinkIndex != PA_INVALID_INDEX) {
-            char buf[128];
-            snprintf(buf, sizeof(buf), "alsa_output.%u.monitor", sinkIndex);
-            monitorName = buf;
-        }
         pa_stream_connect_record(inputStream, monitorName.c_str(), nullptr,
             (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)));
-        pa_stream_connect_playback(outputStream, nullptr, nullptr,
+
+        pa_stream_connect_playback(outputStream, output_device.c_str(), nullptr,
             (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)), nullptr, nullptr);
+
+        while (pa_stream_get_state(inputStream) != PA_STREAM_READY ||
+               pa_stream_get_state(outputStream) != PA_STREAM_READY) {
+            pa_mainloop_iterate(mainloop, 1, nullptr);
+        }
+
+        const pa_sample_spec* inSpec = pa_stream_get_sample_spec(inputStream);
+        const pa_sample_spec* outSpec = pa_stream_get_sample_spec(outputStream);
+        if (inSpec) { audioData.inputChannels = inSpec->channels; audioData.inputRate = inSpec->rate; }
+        if (outSpec) { audioData.outputChannels = outSpec->channels; audioData.outputRate = outSpec->rate; }
 
         while (!stop_audio.load()) {
             pa_mainloop_iterate(mainloop, 1, nullptr);
-            if (audioData.captureBuffer.empty()) continue;
 
+            if (!audioData.haveData.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            std::vector<float> local;
+            {
+                std::lock_guard<std::mutex> lk(audioData.mutex);
+                if (audioData.captureBuffer.empty()) { audioData.haveData = false; continue; }
+                local.swap(audioData.captureBuffer);
+                audioData.haveData = false;
+            }
+
+            size_t inFrames = local.size() / audioData.inputChannels;
             float* resampled = nullptr;
-            size_t outFrames = audioData.captureBuffer.size() / audioData.inputChannels;
+            size_t outFrames = 0;
             bool needResample = (audioData.inputRate != audioData.outputRate) || (audioData.inputChannels != audioData.outputChannels);
 
             if (needResample) {
-                resampled = linear_resample_interleaved(audioData.captureBuffer.data(), outFrames, audioData.inputChannels, audioData.inputRate,
-                                                        audioData.outputRate, &outFrames);
-                if (audioData.inputChannels != audioData.outputChannels)
-                    resampled = remap_channels_interleaved(resampled, outFrames, audioData.inputChannels, audioData.outputChannels);
+                resampled = linear_resample_interleaved(local.data(), inFrames, audioData.inputChannels, audioData.inputRate, audioData.outputRate, &outFrames);
+                if (audioData.inputChannels != audioData.outputChannels) {
+                    float* remapped = remap_channels_interleaved(resampled, outFrames, audioData.inputChannels, audioData.outputChannels);
+                    delete[] resampled;
+                    resampled = remapped;
+                }
             } else {
-                resampled = audioData.captureBuffer.data();
+                resampled = local.data();
+                outFrames = inFrames;
             }
 
-            size_t framesLeft = outFrames;
-            size_t frameIdx = 0;
-            while (framesLeft > 0) {
-                size_t chunkFrames = std::min<size_t>(framesLeft, low_latency ? 2048 : 8192);
-                pa_stream_write(outputStream, resampled + frameIdx * audioData.outputChannels, chunkFrames * audioData.outputChannels * sizeof(float),
-                    nullptr, 0, PA_SEEK_RELATIVE);
-                framesLeft -= chunkFrames;
-                frameIdx += chunkFrames;
+            size_t written = 0;
+            while (written < outFrames && !stop_audio.load()) {
+                size_t chunkFrames = std::min<size_t>(outFrames - written, low_latency ? 2048 : 8192);
+                pa_stream_write(outputStream, resampled + written * audioData.outputChannels,
+                    chunkFrames * audioData.outputChannels * sizeof(float),
+                    nullptr, 0LL, PA_SEEK_RELATIVE);
+                written += chunkFrames;
+                pa_mainloop_iterate(mainloop, 0, nullptr);
             }
 
-            if (needResample && resampled != audioData.captureBuffer.data())
-                delete[] resampled;
-
-            audioData.captureBuffer.clear();
+            if (needResample && resampled != local.data()) delete[] resampled;
         }
 
         pa_stream_disconnect(inputStream);
