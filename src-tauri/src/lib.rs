@@ -50,7 +50,8 @@ pub fn create_window(hide_window: bool) {
             funcs::get_output,
             funcs::get_outputs,
             funcs::delete_channel,
-            funcs::delete_sound
+            funcs::delete_sound,
+            funcs::set_volume
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

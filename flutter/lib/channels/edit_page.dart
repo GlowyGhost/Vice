@@ -37,6 +37,7 @@ class _ChannelsEditState extends State<ChannelsEdit> {
   bool device = true;
   bool lowlatency = false;
   final TextEditingController controllerName = TextEditingController();
+  final ScrollController scrollController = ScrollController();
   
   @override
   void initState() {
@@ -91,149 +92,158 @@ class _ChannelsEditState extends State<ChannelsEdit> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: EdgeInsetsGeometry.all(8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.format_paint),
-                  color: currentColor,
-                  iconSize: 96,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: const Color(0xFF363636),
-                        title: const Text("Choose a color", style: TextStyle(color: Colors.white)),
-                        content: SingleChildScrollView(
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              canvasColor: const Color(0xFF363636),
-                              popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF363636), textStyle: TextStyle(color: Colors.white)),
-                              textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-                              primaryTextTheme: Theme.of(context).primaryTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-                            ),
-                            child: ColorPicker(
-                              pickerColor: pickerColor,
-                              onColorChanged: changeColor,
-                              enableAlpha: false,
-                              showLabel: true,
-                              pickerAreaHeightPercent: 0.8,
-                              labelTextStyle: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-
-                        actions: <Widget>[
-                          TextButton(
-                            child: const Text("Cancel", style: TextStyle(color: Colors.white)),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                          ElevatedButton(
-                            child: const Text("OK"),
-                            onPressed: () {
-                              setState(() => currentColor = pickerColor);
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 16),
-
-                Expanded(
-                  child: TextField(
-                    controller: controllerName,
-                    style: TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      labelText: "Enter name",
-                      labelStyle: TextStyle(color: Colors.white),
-                      filled: true,
-                      fillColor: Color(0xFF363636),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            Row(
-              children: [
-                IconButton(
-                  icon: Icon(getIcon(icon)),
-                  color: Colors.white,
-                  iconSize: 96,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => IconGridDropdown(
-                        icons: IconMap.values.toList(),
-                        onIconSelected: (iconSelected) {
-                          setState(() {icon = fromIcon(iconSelected);});
-                        },
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 35),
-
-                Expanded(
-                  child: TextButton(
+      body: Scrollbar(
+        controller: scrollController,
+        thumbVisibility: true,
+        thickness: 12,
+        radius: const Radius.circular(12),
+        trackVisibility: false,
+        interactive: true,
+        child: SingleChildScrollView(
+          controller: scrollController,
+          padding: EdgeInsetsGeometry.all(8),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.format_paint),
+                    color: currentColor,
+                    iconSize: 96,
                     onPressed: () {
                       showDialog(
                         context: context,
-                        builder: (context) => DeviceDropdown(
-                          devices: devicesApps,
-                          onDeviceSelected: (deviceSelected) {
-                            setState(() {selectedDeviceApp = deviceSelected;});
+                        builder: (context) => AlertDialog(
+                          backgroundColor: const Color(0xFF363636),
+                          title: const Text("Choose a color", style: TextStyle(color: Colors.white)),
+                          content: SingleChildScrollView(
+                            child: Theme(
+                              data: Theme.of(context).copyWith(
+                                canvasColor: const Color(0xFF363636),
+                                popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF363636), textStyle: TextStyle(color: Colors.white)),
+                                textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+                                primaryTextTheme: Theme.of(context).primaryTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+                              ),
+                              child: ColorPicker(
+                                pickerColor: pickerColor,
+                                onColorChanged: changeColor,
+                                enableAlpha: false,
+                                showLabel: true,
+                                pickerAreaHeightPercent: 0.8,
+                                labelTextStyle: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+
+                          actions: <Widget>[
+                            TextButton(
+                              child: const Text("Cancel", style: TextStyle(color: Colors.white)),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            ElevatedButton(
+                              child: const Text("OK"),
+                              onPressed: () {
+                                setState(() => currentColor = pickerColor);
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(width: 16),
+
+                  Expanded(
+                    child: TextField(
+                      controller: controllerName,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: "Enter name",
+                        labelStyle: TextStyle(color: Colors.white),
+                        filled: true,
+                        fillColor: Color(0xFF363636),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(getIcon(icon)),
+                    color: Colors.white,
+                    iconSize: 96,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => IconGridDropdown(
+                          icons: IconMap.values.toList(),
+                          onIconSelected: (iconSelected) {
+                            setState(() {icon = fromIcon(iconSelected);});
                           },
                         ),
                       );
                     },
-                    child: Text(selectedDeviceApp, style: TextStyle(fontSize: 30, color: Colors.white))
-                  )
-                ),
-              ],
-            ),
+                  ),
 
-            Expanded(
-              child: TextButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => DeviceDropdown(
-                      devices: ["Capture device", "Capture app"],
-                      onDeviceSelected: (optionSelected) {
-                        optionSelected == "Capture device"
-                          ? device = true
-                          : device = false;
-                        getDeviceApp();
+                  const SizedBox(width: 35),
+
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => DeviceDropdown(
+                            devices: devicesApps,
+                            onDeviceSelected: (deviceSelected) {
+                              setState(() {selectedDeviceApp = deviceSelected;});
+                            },
+                          ),
+                        );
                       },
-                    ),
-                  );
+                      child: Text(selectedDeviceApp, style: TextStyle(fontSize: 30, color: Colors.white))
+                    )
+                  ),
+                ],
+              ),
+
+              Expanded(
+                child: TextButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => DeviceDropdown(
+                        devices: ["Capture device", "Capture app"],
+                        onDeviceSelected: (optionSelected) {
+                          optionSelected == "Capture device"
+                            ? device = true
+                            : device = false;
+                          getDeviceApp();
+                        },
+                      ),
+                    );
+                  },
+                  child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: Colors.white))
+                )
+              ),
+
+              const SizedBox(height: 20),
+
+              SwitchListTile(
+                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+                value: lowlatency,
+                onChanged: (value) {
+                  setState(() => lowlatency = value);
                 },
-                child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: Colors.white))
-              )
-            ),
-
-            const SizedBox(height: 20),
-
-            SwitchListTile(
-							title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
-							value: lowlatency,
-							onChanged: (value) {
-								setState(() => lowlatency = value);
-							},
-						),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     

@@ -18,6 +18,7 @@ class _SoundboardNewState extends State<SoundboardNew> {
   String icon = "question_mark";
   final TextEditingController controllerName = TextEditingController();
   final TextEditingController controllerSound = TextEditingController();
+  final ScrollController scrollController = ScrollController();
   bool lowlatency = false;
   
   void changeColor(Color color) {
@@ -38,140 +39,149 @@ class _SoundboardNewState extends State<SoundboardNew> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: EdgeInsetsGeometry.all(8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.format_paint),
-                  color: currentColor,
-                  iconSize: 96,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: const Color(0xFF363636),
-                        title: const Text("Choose a color", style: TextStyle(color: Colors.white)),
-                        content: SingleChildScrollView(
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              canvasColor: const Color(0xFF363636),
-                              popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF363636), textStyle: TextStyle(color: Colors.white)),
-                              textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-                              primaryTextTheme: Theme.of(context).primaryTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-                            ),
-                            child: ColorPicker(
-                              pickerColor: pickerColor,
-                              onColorChanged: changeColor,
-                              enableAlpha: false,
-                              showLabel: true,
-                              pickerAreaHeightPercent: 0.8,
-                              labelTextStyle: const TextStyle(color: Colors.white),
+      body: Scrollbar(
+        controller: scrollController,
+        thumbVisibility: true,
+        thickness: 12,
+        radius: const Radius.circular(12),
+        trackVisibility: false,
+        interactive: true,
+        child: SingleChildScrollView(
+          controller: scrollController,
+          padding: EdgeInsetsGeometry.all(8),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.format_paint),
+                    color: currentColor,
+                    iconSize: 96,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: const Color(0xFF363636),
+                          title: const Text("Choose a color", style: TextStyle(color: Colors.white)),
+                          content: SingleChildScrollView(
+                            child: Theme(
+                              data: Theme.of(context).copyWith(
+                                canvasColor: const Color(0xFF363636),
+                                popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF363636), textStyle: TextStyle(color: Colors.white)),
+                                textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+                                primaryTextTheme: Theme.of(context).primaryTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+                              ),
+                              child: ColorPicker(
+                                pickerColor: pickerColor,
+                                onColorChanged: changeColor,
+                                enableAlpha: false,
+                                showLabel: true,
+                                pickerAreaHeightPercent: 0.8,
+                                labelTextStyle: const TextStyle(color: Colors.white),
+                              ),
                             ),
                           ),
+
+                          actions: <Widget>[
+                            TextButton(
+                              child: const Text("Cancel", style: TextStyle(color: Colors.white)),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            ElevatedButton(
+                              child: const Text("OK"),
+                              onPressed: () {
+                                setState(() => currentColor = pickerColor);
+                                printText(currentColor.r.toString());
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ],
                         ),
+                      );
+                    },
+                  ),
 
-                        actions: <Widget>[
-                          TextButton(
-                            child: const Text("Cancel", style: TextStyle(color: Colors.white)),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                          ElevatedButton(
-                            child: const Text("OK"),
-                            onPressed: () {
-                              setState(() => currentColor = pickerColor);
-                              printText(currentColor.r.toString());
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                        ],
+                  const SizedBox(width: 16),
+
+                  Expanded(
+                    child: TextField(
+                      controller: controllerName,
+                      style: TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: "Enter name",
+                        labelStyle: TextStyle(color: Colors.white),
+                        filled: true,
+                        fillColor: Color(0xFF363636),
                       ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 16),
-
-                Expanded(
-                  child: TextField(
-                    controller: controllerName,
-                    style: TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      labelText: "Enter name",
-                      labelStyle: TextStyle(color: Colors.white),
-                      filled: true,
-                      fillColor: Color(0xFF363636),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            Row(
-              children: [
-                IconButton(
-                  icon: Icon(getIcon(icon)),
-                  color: Colors.white,
-                  iconSize: 96,
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => IconGridDropdown(
-                        icons: IconMap.values.toList(),
-                        onIconSelected: (iconSelected) {
-                          setState(() {icon = fromIcon(iconSelected);});
-                        },
-                      ),
-                    );
-                  },
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(getIcon(icon)),
+                    color: Colors.white,
+                    iconSize: 96,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => IconGridDropdown(
+                          icons: IconMap.values.toList(),
+                          onIconSelected: (iconSelected) {
+                            setState(() {icon = fromIcon(iconSelected);});
+                          },
+                        ),
+                      );
+                    },
+                  ),
 
-                const SizedBox(width: 35),
+                  const SizedBox(width: 35),
 
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: controllerSound,
-                          style: TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            labelText: "Enter Sound Effect",
-                            labelStyle: TextStyle(color: Colors.white),
-                            filled: true,
-                            fillColor: Color(0xFF363636),
-                          ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controllerSound,
+                            style: TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: "Enter Sound Effect",
+                              labelStyle: TextStyle(color: Colors.white),
+                              filled: true,
+                              fillColor: Color(0xFF363636),
+                            ),
+                          )
+                        ),
+
+                        const SizedBox(width: 16),
+
+                        IconButton(
+                          onPressed: () async => {controllerSound.text = await invokeJS("pick_menu_sound")},
+                          icon: Icon(Icons.menu, color: Colors.white, size: 96)
                         )
-                      ),
+                      ],
+                    )
+                  ),
+                ],
+              ),
 
-                      const SizedBox(width: 16),
+              const SizedBox(height: 20),
 
-                      IconButton(
-                        onPressed: () async => {controllerSound.text = await invokeJS("pick_menu_sound")},
-                        icon: Icon(Icons.menu, color: Colors.white, size: 96)
-                      )
-                    ],
-                  )
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            SwitchListTile(
-							title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
-							value: lowlatency,
-							onChanged: (value) {
-								setState(() => lowlatency = value);
-							},
-						),
-          ],
+              SwitchListTile(
+                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+                value: lowlatency,
+                onChanged: (value) {
+                  setState(() => lowlatency = value);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     

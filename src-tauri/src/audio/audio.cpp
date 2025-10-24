@@ -4,6 +4,7 @@
 #include <thread>
 #include <fstream>
 #include <unordered_set>
+#include <unordered_map>
 #include <iostream>
 #include <cctype>
 #include <algorithm>
@@ -402,7 +403,17 @@ void clear_statics() {
 
 extern "C" {
     std::atomic<bool> stop_audio(true);
+    #pragma region Volumes
+    static std::unordered_map<std::string, float> volume;
 
+    void reset_volume() {
+        volume.clear();
+    }
+
+    void insert_volume(const char* key, float value) {
+        volume[key] = value;
+    }
+    #pragma endregion
     #pragma region Get Ouputs
     const char** get_outputs(size_t* len) {
         *len = 0;
@@ -930,7 +941,7 @@ extern "C" {
     }
     #pragma endregion
     #pragma region Device to Device
-    void device_to_device(const char* input, const char* output, bool low_latency) {
+    void device_to_device(const char* input, const char* output, bool low_latency, const char* channel_name) {
         #ifdef _WIN32
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
@@ -1024,26 +1035,48 @@ extern "C" {
             DWORD flags = 0;
             if (FAILED(pCapture->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr))) break;
 
+            captureBuffer.resize(numFrames * captureChannels);
+
             if (captureIsFloat) {
-                memcpy(captureBuffer.data(), pData, numFrames * captureChannels * sizeof(float));
+                const float* src = reinterpret_cast<const float*>(pData);
+                for (UINT32 i = 0; i < numFrames * captureChannels; ++i)
+                    captureBuffer[i] = std::max(-1.0f, std::min(1.0f, src[i] * volume[channel_name]));
             } else if (wfCapture->wBitsPerSample == 16) {
-                int16_t* src16 = reinterpret_cast<int16_t*>(pData);
-                for (UINT32 i = 0; i < numFrames * captureChannels; ++i)
-                    captureBuffer[i] = src16[i] / 32768.f;
+                const int16_t* src16 = reinterpret_cast<const int16_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * captureChannels; ++i) {
+                    float sample = static_cast<float>(src16[i]) / 32767.0f;
+                    captureBuffer[i] = std::max(-1.0f, std::min(1.0f, sample * volume[channel_name]));
+                }
             } else if (wfCapture->wBitsPerSample == 32) {
-                int32_t* src32 = reinterpret_cast<int32_t*>(pData);
-                for (UINT32 i = 0; i < numFrames * captureChannels; ++i)
-                    captureBuffer[i] = src32[i] / 2147483648.f;
+                const int32_t* src32 = reinterpret_cast<const int32_t*>(pData);
+                for (UINT32 i = 0; i < numFrames * captureChannels; ++i) {
+                    double sample = static_cast<double>(src32[i]) / 2147483647.0;
+                    captureBuffer[i] = static_cast<float>(std::max(-1.0, std::min(1.0, sample * volume[channel_name])));
+                }
             }
 
             pCapture->ReleaseBuffer(numFrames);
 
             float* toRender = nullptr;
             size_t outFrames = 0;
+
             if (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec || captureChannels != renderChannels) {
-                float* resampled = linear_resample_interleaved(captureBuffer.data(), numFrames, captureChannels, wfCapture->nSamplesPerSec,
-                    wfRender->nSamplesPerSec, &outFrames);
-                float* remapped = remap_channels_interleaved(resampled, outFrames, captureChannels, renderChannels);
+                float* resampled = linear_resample_interleaved(
+                    captureBuffer.data(),
+                    numFrames,
+                    captureChannels,
+                    wfCapture->nSamplesPerSec,
+                    wfRender->nSamplesPerSec,
+                    &outFrames
+                );
+
+                float* remapped = remap_channels_interleaved(
+                    resampled,
+                    outFrames,
+                    captureChannels,
+                    renderChannels
+                );
+
                 delete[] resampled;
                 toRender = remapped;
             } else {
@@ -1051,34 +1084,46 @@ extern "C" {
                 outFrames = numFrames;
             }
 
-            UINT32 written = 0;
+            size_t written = 0;
             while (written < outFrames && !stop_audio.load()) {
                 UINT32 padding = 0;
                 renderClient->GetCurrentPadding(&padding);
                 UINT32 avail = renderFrames - padding;
-                if (avail == 0) { Sleep(1); continue; }
+                if (avail == 0) {
+                    Sleep(1);
+                    continue;
+                }
 
                 UINT32 framesToWrite = std::min(avail, static_cast<UINT32>(outFrames - written));
                 BYTE* renderPtr = nullptr;
                 if (FAILED(pRender->GetBuffer(framesToWrite, &renderPtr))) break;
 
                 if (renderIsFloat && wfRender->wBitsPerSample == 32) {
-                    memcpy(renderPtr, toRender + written * renderChannels, framesToWrite * renderChannels * sizeof(float));
+                    float* dst = reinterpret_cast<float*>(renderPtr);
+                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i) {
+                        float v = toRender[written * renderChannels + i] * volume[channel_name];
+                        dst[i] = std::max(-1.0f, std::min(1.0f, v));
+                    }
                 } else if (!renderIsFloat && wfRender->wBitsPerSample == 16) {
                     int16_t* out16 = reinterpret_cast<int16_t*>(renderPtr);
-                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i)
-                        out16[i] = std::max(-32768.f, std::min(32767.f, toRender[written * renderChannels + i] * 32768.f));
+                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i) {
+                        float v = toRender[written * renderChannels + i] * volume[channel_name] * 32767.0f;
+                        out16[i] = static_cast<int16_t>(std::max(-32768.0f, std::min(32767.0f, v)));
+                    }
                 } else if (!renderIsFloat && wfRender->wBitsPerSample == 32) {
                     int32_t* out32 = reinterpret_cast<int32_t*>(renderPtr);
-                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i)
-                        out32[i] = std::max(-2147483648.f, std::min(2147483647.f, toRender[written * renderChannels + i] * 2147483648.f));
+                    for (UINT32 i = 0; i < framesToWrite * renderChannels; ++i) {
+                        double v = toRender[written * renderChannels + i] * volume[channel_name] * 2147483647.0;
+                        out32[i] = static_cast<int32_t>(std::max(static_cast<double>(INT32_MIN), std::min(static_cast<double>(INT32_MAX), v)));
+                    }
                 }
 
                 if (FAILED(pRender->ReleaseBuffer(framesToWrite, 0))) break;
                 written += framesToWrite;
             }
 
-            if (toRender != captureBuffer.data()) delete[] toRender;
+            if (toRender != captureBuffer.data())
+                delete[] toRender;
         }
 
         captureClient->Stop();
@@ -1167,10 +1212,21 @@ extern "C" {
 
         const pa_sample_spec* capSpec = pa_stream_get_sample_spec(pipe.captureStream);
         const pa_sample_spec* playSpec = pa_stream_get_sample_spec(pipe.playbackStream);
-        if (capSpec) { pipe.captureChannels = capSpec->channels; pipe.captureRate = capSpec->rate; }
-        else { pipe.captureChannels = spec.channels; pipe.captureRate = spec.rate; }
-        if (playSpec) { pipe.playbackChannels = playSpec->channels; pipe.playbackRate = playSpec->rate; }
-        else { pipe.playbackChannels = spec.channels; pipe.playbackRate = spec.rate; }
+        if (capSpec) {
+            pipe.captureChannels = capSpec->channels;
+            pipe.captureRate = capSpec->rate;
+        } else {
+            pipe.captureChannels = spec.channels;
+            pipe.captureRate = spec.rate;
+        }
+
+        if (playSpec) {
+            pipe.playbackChannels = playSpec->channels;
+            pipe.playbackRate = playSpec->rate;
+        } else {
+            pipe.playbackChannels = spec.channels;
+            pipe.playbackRate = spec.rate;
+        }
 
         size_t maxFrames = low_latency ? 8192 : 32768;
         pipe.captureBuffer.reserve(maxFrames * pipe.captureChannels);
@@ -1186,7 +1242,10 @@ extern "C" {
             std::vector<float> localBuffer;
             {
                 std::lock_guard<std::mutex> lk(pipe.mutex);
-                if (pipe.captureBuffer.empty()) { pipe.haveData = false; continue; }
+                if (pipe.captureBuffer.empty()) {
+                    pipe.haveData = false;
+                    continue;
+                }
                 localBuffer.swap(pipe.captureBuffer);
                 pipe.haveData = false;
             }
@@ -1210,11 +1269,27 @@ extern "C" {
                 outFrames = inFrames;
             }
 
+            for (size_t i = 0; i < outFrames * pipe.playbackChannels; ++i) {
+                float v = toRender[i] * volume[channel_name];
+                toRender[i] = std::max(-1.0f, std::min(1.0f, v));
+            }
+
             size_t writtenFrames = 0;
             while (writtenFrames < outFrames && !stop_audio.load()) {
-                size_t chunk = std::min<size_t>(outFrames - writtenFrames, low_latency ? 2048 : 8192);
-                int res = pa_stream_write(pipe.playbackStream, toRender + writtenFrames * pipe.playbackChannels,
-                    chunk * pipe.playbackChannels * sizeof(float), nullptr, 0LL, PA_SEEK_RELATIVE);
+                size_t chunk = std::min<size_t>(
+                    outFrames - writtenFrames,
+                    low_latency ? 2048 : 8192
+                );
+
+                int res = pa_stream_write(
+                    pipe.playbackStream,
+                    toRender + writtenFrames * pipe.playbackChannels,
+                    chunk * pipe.playbackChannels * sizeof(float),
+                    nullptr,
+                    0LL,
+                    PA_SEEK_RELATIVE
+                );
+
                 if (res < 0) {
                     pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
                 } else {
@@ -1237,7 +1312,7 @@ extern "C" {
     }
     #pragma endregion
     #pragma region App to Device
-    void app_to_device(const char* input, const char* output, bool low_latency) {
+    void app_to_device(const char* input, const char* output, bool low_latency, const char* channel_name) {
         #ifdef _WIN32
         CoInitialize(nullptr);
 
@@ -1383,15 +1458,17 @@ extern "C" {
 
             captureBuffer.resize(numFrames * wfCapture->nChannels);
             if (captureIsFloat) {
-                memcpy(captureBuffer.data(), pData, numFrames * wfCapture->nChannels * sizeof(float));
+                float* src = reinterpret_cast<float*>(pData);
+                for (UINT32 i = 0; i < numFrames * wfCapture->nChannels; ++i)
+                    captureBuffer[i] = src[i] * volume[channel_name];
             } else if (wfCapture->wBitsPerSample == 16) {
                 int16_t* src16 = reinterpret_cast<int16_t*>(pData);
                 for (UINT32 i = 0; i < numFrames * wfCapture->nChannels; ++i)
-                    captureBuffer[i] = src16[i] / 32768.f;
+                    captureBuffer[i] = (src16[i] / 32768.f) * volume[channel_name];
             } else if (wfCapture->wBitsPerSample == 32) {
                 int32_t* src32 = reinterpret_cast<int32_t*>(pData);
                 for (UINT32 i = 0; i < numFrames * wfCapture->nChannels; ++i)
-                    captureBuffer[i] = src32[i] / 2147483648.f;
+                    captureBuffer[i] = (src32[i] / 2147483648.f) * volume[channel_name];
             }
 
             pCaptureClient->ReleaseBuffer(numFrames);
@@ -1583,15 +1660,20 @@ extern "C" {
         pa_stream_connect_playback(outputStream, output_device.c_str(), nullptr,
             (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)), nullptr, nullptr);
 
-        while (pa_stream_get_state(inputStream) != PA_STREAM_READY ||
-               pa_stream_get_state(outputStream) != PA_STREAM_READY) {
+        while (pa_stream_get_state(inputStream) != PA_STREAM_READY || pa_stream_get_state(outputStream) != PA_STREAM_READY) {
             pa_mainloop_iterate(mainloop, 1, nullptr);
         }
 
         const pa_sample_spec* inSpec = pa_stream_get_sample_spec(inputStream);
         const pa_sample_spec* outSpec = pa_stream_get_sample_spec(outputStream);
-        if (inSpec) { audioData.inputChannels = inSpec->channels; audioData.inputRate = inSpec->rate; }
-        if (outSpec) { audioData.outputChannels = outSpec->channels; audioData.outputRate = outSpec->rate; }
+        if (inSpec) {
+            audioData.inputChannels = inSpec->channels;
+            audioData.inputRate = inSpec->rate;
+        }
+        if (outSpec) {
+            audioData.outputChannels = outSpec->channels;
+            audioData.outputRate = outSpec->rate;
+        }
 
         while (!stop_audio.load()) {
             pa_mainloop_iterate(mainloop, 1, nullptr);
@@ -1610,33 +1692,39 @@ extern "C" {
             }
 
             size_t inFrames = local.size() / audioData.inputChannels;
-            float* resampled = nullptr;
+            float* bufferToRender = nullptr;
             size_t outFrames = 0;
             bool needResample = (audioData.inputRate != audioData.outputRate) || (audioData.inputChannels != audioData.outputChannels);
 
             if (needResample) {
-                resampled = linear_resample_interleaved(local.data(), inFrames, audioData.inputChannels, audioData.inputRate, audioData.outputRate, &outFrames);
+                float* resampled = linear_resample_interleaved(local.data(), inFrames, audioData.inputChannels, audioData.inputRate, audioData.outputRate, &outFrames);
                 if (audioData.inputChannels != audioData.outputChannels) {
                     float* remapped = remap_channels_interleaved(resampled, outFrames, audioData.inputChannels, audioData.outputChannels);
                     delete[] resampled;
-                    resampled = remapped;
+                    bufferToRender = remapped;
+                } else {
+                    bufferToRender = resampled;
                 }
             } else {
-                resampled = local.data();
+                bufferToRender = local.data();
                 outFrames = inFrames;
+            }
+
+            for (size_t i = 0; i < outFrames * audioData.outputChannels; ++i) {
+                bufferToRender[i] = std::max(-1.0f, std::min(1.0f, bufferToRender[i] * volume[channel_name]));
             }
 
             size_t written = 0;
             while (written < outFrames && !stop_audio.load()) {
-                size_t chunkFrames = std::min<size_t>(outFrames - written, low_latency ? 2048 : 8192);
-                pa_stream_write(outputStream, resampled + written * audioData.outputChannels,
-                    chunkFrames * audioData.outputChannels * sizeof(float),
+                size_t chunkFrames = std::min(outFrames - written, low_latency ? 2048 : 8192);
+                pa_stream_write(outputStream, bufferToRender + written * audioData.outputChannels, chunkFrames * audioData.outputChannels * sizeof(float),
                     nullptr, 0LL, PA_SEEK_RELATIVE);
                 written += chunkFrames;
                 pa_mainloop_iterate(mainloop, 0, nullptr);
             }
 
-            if (needResample && resampled != local.data()) delete[] resampled;
+            if (needResample && bufferToRender != local.data())
+                delete[] bufferToRender;
         }
 
         pa_stream_disconnect(inputStream);

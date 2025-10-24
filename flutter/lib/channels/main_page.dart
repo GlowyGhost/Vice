@@ -19,8 +19,9 @@ class ChannelsClass {
   String device;
   bool deviceOrApp;
   bool lowlatency;
+  double volume;
 
-  ChannelsClass(this.name, this.icon, this.color, this.device, this.deviceOrApp, this.lowlatency);
+  ChannelsClass(this.name, this.icon, this.color, this.device, this.deviceOrApp, this.lowlatency, this.volume);
 }
 
 class ChannelsMain extends StatefulWidget {
@@ -59,7 +60,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
     List<ChannelsClass> convertedChannels = [];
 
     for (final SFXsChannels channel in channels) {
-      convertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!, channel.deviceOrApp!, channel.lowlatency!));
+      convertedChannels.add(ChannelsClass(channel.name!, channel.icon!, ChannelsColor(channel.color![0], channel.color![1], channel.color![2]), channel.device!, channel.deviceOrApp!, channel.lowlatency!, channel.volume!));
     }
     
     setState(() {
@@ -110,7 +111,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
                       IconData icon = getIcon(channel!.icon);
                       Color color = Color.fromARGB(255, channel.color.r, channel.color.g, channel.color.b);
 
-                      double volume = 0.5;
+                      double volume = channel.volume;
 
                       return StatefulBuilder(
                         builder: (context, setState) {
@@ -118,6 +119,10 @@ class _ChannelsMainState extends State<ChannelsMain> {
                             if (v <= 0.7) return Colors.green;
                             if (v <= 0.9) return Colors.orange;
                             return Colors.red;
+                          }
+
+                          Future<void> volumeCall() async {
+                            await invokeJS("set_volume", {"name": name, "volume": volume*2});
                           }
 
                           return Container(
@@ -173,7 +178,14 @@ class _ChannelsMainState extends State<ChannelsMain> {
                                               inactiveColor: Colors.transparent,
                                               activeColor: Colors.transparent,
                                               onChanged: (val) {
-                                                setState(() => volume = val);
+                                                double v = val;
+                                                if (v < 0.55 && v > 0.45) {
+                                                  v = 0.5;
+                                                }
+
+                                                setState(() => volume = v);
+
+                                                volumeCall();
                                               },
                                             ),
                                           ),

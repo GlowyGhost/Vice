@@ -84,6 +84,7 @@ class SFXsChannels {
   final List<int>? color;
   final bool? deviceOrApp;
   final bool? lowlatency;
+  final double? volume;
 
   SFXsChannels({
     this.name,
@@ -93,6 +94,7 @@ class SFXsChannels {
     this.color,
     this.deviceOrApp,
     this.lowlatency,
+    this.volume
   });
 
   factory SFXsChannels.fromMap(Map<String, dynamic> map) {
@@ -109,6 +111,7 @@ class SFXsChannels {
       color: parsedColor,
       deviceOrApp: map["deviceorapp"],
       lowlatency: map["lowlatency"],
+      volume: map["volume"]
     );
   }
 }

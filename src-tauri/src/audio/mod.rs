@@ -14,8 +14,10 @@ unsafe extern "C" {
     fn get_inputs(len: *mut usize) -> *const *const c_char;
     fn get_apps(len: *mut usize) -> *const *const c_char;
     fn play_sound(wav_file: *const c_char, device_name: *const c_char, low_latency: bool);
-    fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool);
-    fn app_to_device(input: *const c_char, output: *const c_char, low_latency: bool);
+    fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
+    fn app_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
+    fn insert_volume(key: *const c_char, value: f32);
+    fn reset_volume();
 }
 
 pub(crate) fn outputs() -> Vec<String> {
@@ -57,8 +59,10 @@ pub(crate) fn play_sfx(file_path: &str, low_latency: bool) {
     let device: *const c_char = c_device
         .as_ref()
         .map_or(std::ptr::null(), |s| s.as_ptr());
+    
+    let file = CString::new(file_path).unwrap();
 
-    unsafe {play_sound(CString::new(file_path).unwrap().as_ptr(), device, low_latency);}
+    unsafe {play_sound(file.as_ptr(), device, low_latency);}
 }
 
 pub(crate) fn apps() -> Vec<String> {
@@ -76,24 +80,36 @@ pub(crate) fn apps() -> Vec<String> {
     }
 }
 
-fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>, low_latency: bool) {
+fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>, low_latency: bool, channel_name: String) {
     let input_cstr = input_device_name.map(|device| CString::new(device).unwrap());
     let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
+    let name_cstr = CString::new(channel_name).unwrap();
 
     let input: *const i8 = input_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
+    let name: *const i8 = name_cstr.as_ptr();
 
-    unsafe {device_to_device(input, output, low_latency)};
+    unsafe {device_to_device(input, output, low_latency, name)};
 }
 
-fn manage_app(app_name: &str, output_device_name: Option<&str>, low_latency: bool) {
+fn manage_app(app_name: &str, output_device_name: Option<&str>, low_latency: bool, channel_name: String) {
     let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
     let input_cstr = CString::new(app_name).unwrap();
+    let name_cstr = CString::new(channel_name).unwrap();
 
     let input: *const i8 = input_cstr.as_ptr();
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
+    let name: *const i8 = name_cstr.as_ptr();
 
-    unsafe {app_to_device(input, output, low_latency)};
+    unsafe {app_to_device(input, output, low_latency, name)};
+}
+
+pub(crate) fn set_volume(channel_name: String, volume: f32) {
+    let name_cstr = CString::new(channel_name).unwrap();
+
+    let name: *const i8 = name_cstr.as_ptr();
+
+    unsafe { insert_volume(name, volume); }
 }
 
 pub(crate) fn start() {
@@ -112,10 +128,18 @@ pub(crate) fn start() {
             thread::Builder::new()
                 .name(channel.name.clone())
                 .spawn(move || {
+                    unsafe {
+                        let channel_cstr = CString::new(channel.name.clone()).unwrap();
+
+                        let channel_name: *const i8 = channel_cstr.as_ptr();
+
+                        insert_volume(channel_name, channel.volume);
+                    }
+
                     if channel.deviceorapp {
-                        manage_device(Some(&channel.device), files::get_output().as_deref(), channel.lowlatency);
+                        manage_device(Some(&channel.device), files::get_output().as_deref(), channel.lowlatency, channel.name);
                     } else {
-                        manage_app(&channel.device, files::get_output().as_deref(), channel.lowlatency);
+                        manage_app(&channel.device, files::get_output().as_deref(), channel.lowlatency, channel.name);
                     }
                 })
                 .expect(&format!("Failed to spawn channel thread"));
@@ -135,6 +159,8 @@ pub(crate) fn restart() {
             println!("Restarting audio threads");
 
             unsafe {
+                reset_volume();
+
                 stop_audio.store(true, Ordering::SeqCst);
             }
 

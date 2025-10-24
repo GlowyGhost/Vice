@@ -16,7 +16,7 @@ pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps
     match files::get_settings().unwrap() {
         None => {return Ok(());}
         Some(set) => {
-            let channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low};
+            let channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
             let mut channels = set.channels;
 
             channels.push(channel);
@@ -47,7 +47,7 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
             let mut channels = set.channels;
 
             if let Some(pos) = channels.iter().position(|c| c.name == oldname) {
-                channels[pos] = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low};
+                channels[pos] = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
             } else {
                 return Err(format!("Channel '{}' not found", oldname));
             }
@@ -143,6 +143,29 @@ pub(crate) fn set_output(output: String) -> Result<(), String> {
             let res = files::save_settings(&set).map(|_| audio::restart());
 
             res
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn set_volume(name: String, volume: f32) {
+    match files::get_settings().unwrap() {
+        None => {return;}
+        Some(set) => {
+            let mut channels = set.channels;
+
+            if let Some(pos) = channels.iter().position(|c| c.name == name) {
+                let mut channel: Channel = channels[pos].clone();
+                channel.volume = volume;
+                channels[pos] = channel.clone();
+
+                audio::set_volume(channel.name, volume);
+            } else {
+                eprintln!("Channel '{}' not found", name);
+                return;
+            }
+
+            files::save_channels(channels).unwrap_or_else(|e| {eprintln!("Error saving channels: {}", e); return;});
         }
     }
 }

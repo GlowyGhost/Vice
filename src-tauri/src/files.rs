@@ -16,7 +16,7 @@ pub(crate) struct SoundboardSFX {
     pub(crate) lowlatency: bool
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub(crate) struct Channel {
     pub(crate) name: String,
     pub(crate) icon: String,
@@ -25,6 +25,7 @@ pub(crate) struct Channel {
     pub(crate) deviceorapp: bool,
     #[serde(default)]
     pub(crate) lowlatency: bool,
+    pub(crate) volume: f32
 }
 
 #[derive(Deserialize, Serialize)]
