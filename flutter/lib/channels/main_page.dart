@@ -111,7 +111,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
                       IconData icon = getIcon(channel!.icon);
                       Color color = Color.fromARGB(255, channel.color.r, channel.color.g, channel.color.b);
 
-                      double volume = channel.volume;
+                      double volume = channel.volume/2;
 
                       return StatefulBuilder(
                         builder: (context, setState) {

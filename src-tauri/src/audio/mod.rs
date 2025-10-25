@@ -4,7 +4,7 @@ use std::{
     thread
 };
 
-use crate::files::{self};
+use crate::files::{self, Channel};
 
 #[link(name = "audio")]
 unsafe extern "C" {
@@ -51,16 +51,18 @@ pub(crate) fn inputs() -> Vec<String> {
 }
 
 pub(crate) fn play_sfx(file_path: &str, low_latency: bool) {
-    let c_device = match files::get_output() {
-        Some(output) => Some(CString::new(output).unwrap()),
-        None => None,
+    let output = files::get_output();
+
+    let c_device: Option<CString> = match output.is_empty() {
+        true => None,
+        false => Some(CString::new(output).unwrap())
     };
 
     let device: *const c_char = c_device
         .as_ref()
         .map_or(std::ptr::null(), |s| s.as_ptr());
     
-    let file = CString::new(file_path).unwrap();
+    let file: CString = CString::new(file_path).unwrap();
 
     unsafe {play_sound(file.as_ptr(), device, low_latency);}
 }
@@ -80,10 +82,16 @@ pub(crate) fn apps() -> Vec<String> {
     }
 }
 
-fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&str>, low_latency: bool, channel_name: String) {
-    let input_cstr = input_device_name.map(|device| CString::new(device).unwrap());
-    let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
-    let name_cstr = CString::new(channel_name).unwrap();
+fn manage_device(input_device_name: String, output_device_name: String, low_latency: bool, channel_name: String) {
+    let input_cstr: Option<CString> = match input_device_name.is_empty() {
+        true => None,
+        false => Some(CString::new(input_device_name).unwrap())
+    };
+    let output_cstr: Option<CString> = match output_device_name.is_empty() {
+        true => None,
+        false => Some(CString::new(output_device_name).unwrap())
+    };
+    let name_cstr: CString = CString::new(channel_name).unwrap();
 
     let input: *const i8 = input_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
@@ -92,10 +100,13 @@ fn manage_device(input_device_name: Option<&str>, output_device_name: Option<&st
     unsafe {device_to_device(input, output, low_latency, name)};
 }
 
-fn manage_app(app_name: &str, output_device_name: Option<&str>, low_latency: bool, channel_name: String) {
-    let output_cstr = output_device_name.map(|device| CString::new(device).unwrap());
-    let input_cstr = CString::new(app_name).unwrap();
-    let name_cstr = CString::new(channel_name).unwrap();
+fn manage_app(app_name: String, output_device_name: String, low_latency: bool, channel_name: String) {
+    let input_cstr: CString = CString::new(app_name).unwrap();
+    let output_cstr: Option<CString> = match output_device_name.is_empty() {
+        true => None,
+        false => Some(CString::new(output_device_name).unwrap())
+    };
+    let name_cstr: CString = CString::new(channel_name).unwrap();
 
     let input: *const i8 = input_cstr.as_ptr();
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
@@ -123,33 +134,37 @@ pub(crate) fn start() {
         stop_audio.store(false, Ordering::SeqCst);
     }
 
-    if let Some(channels) = files::get_channels() {
-        for channel in channels {
-            thread::Builder::new()
-                .name(channel.name.clone())
-                .spawn(move || {
-                    unsafe {
-                        let channel_cstr = CString::new(channel.name.clone()).unwrap();
+    let channels: Vec<Channel> = files::get_channels();
 
-                        let channel_name: *const i8 = channel_cstr.as_ptr();
-
-                        insert_volume(channel_name, channel.volume);
-                    }
-
-                    if channel.deviceorapp {
-                        manage_device(Some(&channel.device), files::get_output().as_deref(), channel.lowlatency, channel.name);
-                    } else {
-                        manage_app(&channel.device, files::get_output().as_deref(), channel.lowlatency, channel.name);
-                    }
-                })
-                .expect(&format!("Failed to spawn channel thread"));
-        }
-
-        println!("Created audio threads");
+    if channels.is_empty() {
+        println!("No threads to create");
         return;
     }
 
-    println!("No threads to create");
+    for channel in channels {
+        let thread_name: String = channel.name.clone();
+        if let Err(e) = thread::Builder::new()
+            .name(thread_name.clone())
+            .spawn(move || {
+                unsafe {
+                    let channel_cstr = CString::new(channel.name.clone()).unwrap();
+
+                    let channel_name: *const i8 = channel_cstr.as_ptr();
+
+                    insert_volume(channel_name, channel.volume);
+                }
+
+                if channel.deviceorapp {
+                    manage_device(channel.device, files::get_output(), channel.lowlatency, channel.name);
+                } else {
+                    manage_app(channel.device, files::get_output(), channel.lowlatency, channel.name);
+                }
+            }) {
+            eprintln!("Failed to spawn audio thread '{}': {}", thread_name, e);
+        }
+    }
+
+    println!("Created audio threads");
 }
 
 pub(crate) fn restart() {
