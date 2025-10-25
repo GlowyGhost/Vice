@@ -239,19 +239,33 @@ jobs:
           name: release-${{ matrix.os }}
           path: temp
 
+      - name: Rename Installation File (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cd docs
+          mv Installation-Linux.md Installation.md
+
+      - name: Rename Installation File (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd docs
+          Rename-Item -Path Installation-Windows.md -NewName Installation.md
+
       - name: Package Release Zip (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           cd temp
-          zip -j linux.zip Vice Vice-debug ../LICENSE
+          zip -j linux.zip Vice Vice-debug ../LICENSE ../docs/Installation.md
 
       - name: Package Release Zip (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           cd temp
-          Compress-Archive -Path Vice.exe, Vice-debug.exe, ../LICENSE -DestinationPath windows.zip -Force
+          Compress-Archive -Path Vice.exe, Vice-debug.exe, ../LICENSE, ../docs/Installation.md -DestinationPath windows.zip -Force
 
       - name: Upload final zip
         uses: actions/upload-artifact@v4
