@@ -1716,7 +1716,7 @@ extern "C" {
 
             size_t written = 0;
             while (written < outFrames && !stop_audio.load()) {
-                size_t chunkFrames = std::min(outFrames - written, low_latency ? 2048 : 8192);
+                size_t chunkFrames = std::min(outFrames - written, static_cast<size_t>(low_latency ? 2048 : 8192));
                 pa_stream_write(outputStream, bufferToRender + written * audioData.outputChannels, chunkFrames * audioData.outputChannels * sizeof(float),
                     nullptr, 0LL, PA_SEEK_RELATIVE);
                 written += chunkFrames;
