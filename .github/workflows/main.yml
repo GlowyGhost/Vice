@@ -80,6 +80,22 @@ jobs:
             echo "No package.json found, skipping npm install"
           fi
 
+      - name: Rename Files (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd src-tauri
+          ren icons icons-release
+          ren icons-console icons
+
+      - name: Rename Files (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cd src-tauri
+          mv icons icons-release
+          mv icons-console icons
+
       - name: Install C++ compiler (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
