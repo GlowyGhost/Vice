@@ -32,6 +32,7 @@
 #include <pulse/error.h>
 #include <cstring>
 #include <mutex>
+#include <memory>
 #endif
 #pragma endregion
 
@@ -260,25 +261,25 @@ void stream_read_callback(pa_stream* s, size_t length, void* userdata) {
 }
 
 snd_pcm_t* find_device_by_name(bool output, const char* display_name) {
-    void **hints;
+    void** hints = nullptr;
     snd_pcm_t* handle = nullptr;
 
     if (snd_device_name_hint(-1, "pcm", &hints) < 0)
         return nullptr;
 
-    std::string device_name;
+    std::string selected_device;
 
-    for (void **n = hints; *n != nullptr; ++n) {
-        char *name = snd_device_name_get_hint(*n, "NAME");
-        char *desc = snd_device_name_get_hint(*n, "DESC");
-        char *ioid = snd_device_name_get_hint(*n, "IOID");
+    for (void** n = hints; *n != nullptr; ++n) {
+        char* name = snd_device_name_get_hint(*n, "NAME");
+        char* desc = snd_device_name_get_hint(*n, "DESC");
+        char* ioid = snd_device_name_get_hint(*n, "IOID");
 
         bool is_output = (!ioid || strcmp(ioid, "Output") == 0);
         if (is_output == output) {
             std::string display = format_alsa_hint(name, desc);
-            if (!display.empty() && display == display_name) {
+            if (!display.empty() && display_name && display == display_name) {
                 if (name)
-                    device_name = name;
+                    selected_device = name;
             }
         }
 
@@ -286,15 +287,18 @@ snd_pcm_t* find_device_by_name(bool output, const char* display_name) {
         if (desc) free(desc);
         if (ioid) free(ioid);
 
-        if (!device_name.empty())
-            break;
+        if (!selected_device.empty()) break;
     }
 
     snd_device_name_free_hint(hints);
 
-    const char* alsa_device = device_name.empty() ? "default" : device_name.c_str();
+    const char* alsa_device = selected_device.empty() ? "default" : selected_device.c_str();
 
-    snd_pcm_open(&handle, alsa_device, output ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0);
+    int err = snd_pcm_open(&handle, alsa_device, output ? SND_PCM_STREAM_PLAYBACK : SND_PCM_STREAM_CAPTURE, 0);
+    if (err < 0) {
+        std::cerr << "Failed to open ALSA device '" << alsa_device << "': " << snd_strerror(err) << "\n";
+        return nullptr;
+    }
 
     return handle;
 }
@@ -884,10 +888,27 @@ extern "C" {
         targetDevice->Release();
         #else
         snd_pcm_t* handle = find_device_by_name(true, device_name);
+        if (!handle) {
+            std::cerr << "Failed to open ALSA device: " << device_name << "\n";
+            delete[] wav.buffer;
+            return;
+        }
 
         snd_pcm_hw_params_t* params;
-        snd_pcm_hw_params_malloc(&params);
-        snd_pcm_hw_params_any(handle, params);
+        if (snd_pcm_hw_params_malloc(&params) < 0) {
+            std::cerr << "Failed to allocate ALSA hw_params\n";
+            snd_pcm_close(handle);
+            delete[] wav.buffer;
+            return;
+        }
+
+        if (snd_pcm_hw_params_any(handle, params) < 0) {
+            std::cerr << "Failed to initialize ALSA hw_params\n";
+            snd_pcm_hw_params_free(params);
+            snd_pcm_close(handle);
+            delete[] wav.buffer;
+            return;
+        }
 
         bool isFloat = false;
         int bitsPerSample = 16;
@@ -919,9 +940,12 @@ extern "C" {
         snd_pcm_hw_params(handle, params);
         snd_pcm_hw_params_free(params);
 
-        std::thread([handle, wav, format, low_latency]() {
-            const void* data = wav.buffer;
+        auto buffer = std::shared_ptr<char[]>(wav.buffer);
+        std::thread([handle, buffer, wav, format, low_latency]() {
+            const void* data = buffer.get();
             size_t frameSize = wav.channels * ((format == SND_PCM_FORMAT_S16_LE) ? 2 : (format == SND_PCM_FORMAT_S32_LE || format == SND_PCM_FORMAT_FLOAT_LE) ? 4 : 0);
+            if (frameSize == 0) return;
+
             size_t totalFrames = wav.bufferSize / frameSize;
             size_t framesWritten = 0;
             const size_t chunkFrames = low_latency ? 512 : 1024;
@@ -929,9 +953,13 @@ extern "C" {
             while (framesWritten < totalFrames && !stop_audio.load()) {
                 size_t toWrite = std::min(chunkFrames, totalFrames - framesWritten);
                 snd_pcm_sframes_t written = snd_pcm_writei(handle, (const char*)data + framesWritten * frameSize, toWrite);
-                if (written == -EPIPE) { snd_pcm_prepare(handle); continue; }
-                else if (written < 0) { std::cerr << "ALSA write error\n"; break; }
-                else framesWritten += written;
+                if (written == -EPIPE) { 
+                    if (snd_pcm_prepare(handle) < 0) break;
+                    continue;
+                } else if (written < 0) {
+                    std::cerr << "ALSA write error\n";
+                    break;
+                } else framesWritten += written;
             }
 
             snd_pcm_drain(handle);
@@ -1205,8 +1233,7 @@ extern "C" {
         pa_stream_connect_playback(pipe.playbackStream, output_device.c_str(), nullptr,
             (pa_stream_flags_t)(PA_STREAM_ADJUST_LATENCY | (low_latency ? PA_STREAM_START_CORKED : 0)), nullptr, nullptr);
 
-        while (pa_stream_get_state(pipe.captureStream) != PA_STREAM_READY ||
-               pa_stream_get_state(pipe.playbackStream) != PA_STREAM_READY) {
+        while (pa_stream_get_state(pipe.captureStream) != PA_STREAM_READY || pa_stream_get_state(pipe.playbackStream) != PA_STREAM_READY) {
             pa_mainloop_iterate(pipe.mainloop, 1, nullptr);
         }
 

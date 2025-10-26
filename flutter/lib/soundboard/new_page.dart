@@ -91,7 +91,6 @@ class _SoundboardNewState extends State<SoundboardNew> {
                               child: const Text("OK"),
                               onPressed: () {
                                 setState(() => currentColor = pickerColor);
-                                printText(currentColor.r.toString());
                                 Navigator.of(context).pop();
                               },
                             ),

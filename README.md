@@ -14,4 +14,4 @@
 3. Make Vice output to the new audio device.
 4. Make other apps/games to use the audio device
 
-If you would like more info on installation look at [here](docs/Installation.md)
+If you would like more info on installation. Look [here on Windows](./docs/Installation-Windows.md). Look [here on Linux](./docs/Installation-Linux.md)
