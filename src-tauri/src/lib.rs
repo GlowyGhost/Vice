@@ -1,8 +1,42 @@
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,};
+use tauri::{
+    menu::{Menu, MenuItem}, tray::{TrayIcon, TrayIconBuilder}, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent
+};
 
 mod files;
 mod funcs;
 mod audio;
+
+pub fn create_system_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
+    let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let restart_i = MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?;
+    let open_i = MenuItem::with_id(app, "open", "Open Menu", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&quit_i, &restart_i, &open_i])?;
+
+    let tray = TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "quit" => {
+                std::process::exit(0);
+            },
+            "restart" => {
+                audio::restart();
+            },
+            "open" => {
+                create_or_show_window(app, false);
+            },
+            _ => {
+                println!("Menu item {:#?} not handled", event.id);
+            }
+        })
+        .build(app);
+    
+    match tray {
+        Ok(t) => {return Ok(t)}
+        Err(e) => {eprintln!("Failed to create system tray icon: {:#?}", e); return Err(e);}
+    }
+}
 
 pub fn create_or_show_window(app: &AppHandle, hide_window: bool) {
     if let Some(window) = app.get_webview_window("Vice") {
@@ -29,9 +63,9 @@ pub fn create_window(hide_window: bool) {
     tauri::Builder::default()
         .setup(move |app| {
             files::create_files();
-
             create_or_show_window(&app.handle(), hide_window);
-
+            create_system_tray(&app.handle())?;
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
