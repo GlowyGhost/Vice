@@ -106,11 +106,17 @@ pub(crate) fn get_apps() -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn set_output(output: String) -> Result<(), String> {
+pub(crate) fn save_settings(output: String, scale: f32) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
-    settings.output = output.clone();
+    settings.output = output;
+    settings.scale = scale;
+    
+    files::save_settings(settings).map(|_| audio::restart())
+}
 
-    files::save_settings(&settings).map(|_| audio::restart())
+#[tauri::command]
+pub(crate) fn get_settings() -> Settings {
+    files::get_settings()
 }
 
 #[tauri::command]
@@ -129,11 +135,6 @@ pub(crate) fn set_volume(name: String, volume: f32) {
     }
 
     files::save_channels(channels).unwrap_or_else(|e| eprintln!("Error saving channels: {}", e));
-}
-
-#[tauri::command]
-pub(crate) fn get_output() -> String {
-    files::get_output()
 }
 
 #[tauri::command]

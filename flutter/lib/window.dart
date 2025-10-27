@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'invoke_js.dart';
+import 'package:vice/settings/page.dart';
 import 'soundboard/page.dart';
 import 'channels/page.dart';
 
-enum WindowPage { channels, soundboard }
+enum WindowPage { channels, soundboard, settings }
 
 class Window extends StatefulWidget {
   const Window({super.key});
@@ -14,32 +14,6 @@ class Window extends StatefulWidget {
 
 class _WindowState extends State<Window> {
   WindowPage _currentPage = WindowPage.channels;
-  String outputDevice = "Please wait.";
-  List<String> devices = ["Please wait."];
-
-  @override
-  void initState() {
-    super.initState();
-
-    _init();
-  }
-
-  Future<void> _init() async {
-    final String? device = await invokeJS("get_output");
-    final outputs = await invokeJS("get_outputs");
-
-    setState(() {devices = outputs;});
-
-    if (device != null && device.trim().isNotEmpty) {
-      setState(() {outputDevice = device;});
-    } else {
-      setState(() {outputDevice = "Select your output device.";});
-    }
-  }
-
-  Future<void> _save() async {
-    await invokeJS("set_output", {"output": outputDevice});
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,22 +62,18 @@ class _WindowState extends State<Window> {
                     child: Text("Soundboard", style: TextStyle(fontSize: 32)),
                   ),
 
-                  Spacer(),
+                  const SizedBox(height: 10),
 
                   TextButton(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => DeviceDropdown(
-                          devices: devices,
-                          onDeviceSelected: (optionSelected) {
-                            setState(() {outputDevice = optionSelected;});
-                            _save();
-                          },
-                        ),
-                      );
-                    },
-                    child: Text(outputDevice, style: TextStyle(fontSize: 30, color: Colors.white))
+                    style: TextButton.styleFrom(
+                      foregroundColor: _currentPage == WindowPage.settings ? 
+                        Color(0xFFFFFFFF)
+                        : Color(0xFFB3B3B3),
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                      alignment: Alignment.centerLeft,
+                    ),
+                    onPressed: () => setState(() => _currentPage = WindowPage.settings),
+                    child: Text("Settings", style: TextStyle(fontSize: 32)),
                   ),
                 ],
               ),
@@ -116,6 +86,7 @@ class _WindowState extends State<Window> {
               child: switch (_currentPage) {
                 WindowPage.channels => ChannelsManagerDisplay(),
                 WindowPage.soundboard => SoundboardManagerDisplay(),
+                WindowPage.settings => SettingsPage()
               }
             )
           )

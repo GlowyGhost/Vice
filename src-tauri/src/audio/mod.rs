@@ -51,7 +51,7 @@ pub(crate) fn inputs() -> Vec<String> {
 }
 
 pub(crate) fn play_sfx(file_path: &str, low_latency: bool) {
-    let output = files::get_output();
+    let output: String = files::get_settings().output;
 
     let c_device: Option<CString> = match output.is_empty() {
         true => None,
@@ -155,9 +155,9 @@ pub(crate) fn start() {
                 }
 
                 if channel.deviceorapp {
-                    manage_device(channel.device, files::get_output(), channel.lowlatency, channel.name);
+                    manage_device(channel.device, files::get_settings().output, channel.lowlatency, channel.name);
                 } else {
-                    manage_app(channel.device, files::get_output(), channel.lowlatency, channel.name);
+                    manage_app(channel.device, files::get_settings().output, channel.lowlatency, channel.name);
                 }
             }) {
             eprintln!("Failed to spawn audio thread '{}': {}", thread_name, e);

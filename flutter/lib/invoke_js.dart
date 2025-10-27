@@ -25,19 +25,19 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
         final map = toMap(e);
 
         if (map.containsKey("name") ||
-            map.containsKey("icon") ||
-            map.containsKey("sound") ||
-            map.containsKey("device") ||
-            map.containsKey("color") ||
-            map.containsKey("lowlatency")) {
+          map.containsKey("icon") ||
+          map.containsKey("sound") ||
+          map.containsKey("device") ||
+          map.containsKey("color") ||
+          map.containsKey("lowlatency")) {
           return SFXsChannels.fromMap(map);
         }
 
         return e.toString();
       }).toList();
+    } else {
+      return toMap(result);
     }
-
-    return result;
   } catch (e) {
     printText("Error during JS invoking: $e");
     return;
@@ -112,6 +112,23 @@ class SFXsChannels {
       deviceOrApp: map["deviceorapp"],
       lowlatency: map["lowlatency"],
       volume: map["volume"]
+    );
+  }
+}
+
+class Settings {
+  final String? output;
+  final double? scale;
+
+  Settings({
+    this.output,
+    this.scale
+  });
+
+  factory Settings.fromMap(Map<String, dynamic> map) {
+    return Settings(
+      output: map["output"],
+      scale: map["scale"]
     );
   }
 }
