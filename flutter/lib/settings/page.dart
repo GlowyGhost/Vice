@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../channels/page.dart';
 import '../invoke_js.dart';
+import '../main.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -24,6 +26,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _save() async {
     await settings.saveSettings();
+
+    final appState = Provider.of<AppStateNotifier>(context, listen: false);
+    appState.reload();
   }
 
   Future<void> _update() async {
@@ -143,6 +148,7 @@ class SettingsData extends ChangeNotifier {
 	String outputDevice = "Please wait";
   List<String> devices = ["Please wait"];
   double scale = 2147483647.0;
+  String version = "Please wait";
 
 	Future<void> loadSettings() async {
 		final settings = await invokeJS('get_settings');
@@ -155,7 +161,14 @@ class SettingsData extends ChangeNotifier {
     final outputs = await invokeJS("get_outputs");
 
     devices = outputs;
+
+    getVersion();
 	}
+
+  Future<void> getVersion() async {
+    final version = await invokeJS('get_version');
+    settings.version = version;
+  }
 
 	Future<void> saveSettings() async {
 		await invokeJS("save_settings", {"output": outputDevice, "scale": scale});

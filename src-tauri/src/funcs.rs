@@ -110,7 +110,7 @@ pub(crate) fn save_settings(output: String, scale: f32) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
     settings.output = output;
     settings.scale = scale;
-    
+
     files::save_settings(settings).map(|_| audio::restart())
 }
 
@@ -143,11 +143,21 @@ pub(crate) fn get_outputs() -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn flutter_print(text: &str) {
-    println!("{}", text)
+pub(crate) fn get_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+pub(crate) fn open_link(url: String) -> Result<(), String> {
+    open::that(url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub(crate) fn play_sound(sound: String, low: bool) {
     audio::play_sfx(&sound, low);
+}
+
+#[tauri::command]
+pub(crate) fn flutter_print(text: &str) {
+    println!("{}", text)
 }

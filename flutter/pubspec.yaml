@@ -9,13 +9,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  js: ^0.6.7
+  flutter_colorpicker: ^1.1.0
+  font_awesome_flutter: ^10.7.0
+  provider: ^6.0.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  js: ^0.6.7
-  flutter_lints: ^5.0.0
-  flutter_colorpicker: ^1.1.0
 
 flutter:
   uses-material-design: true

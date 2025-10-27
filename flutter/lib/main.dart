@@ -1,55 +1,81 @@
 import 'package:flutter/material.dart';
-import 'package:vice/invoke_js.dart';
+import 'package:provider/provider.dart';
+import 'invoke_js.dart';
 import 'settings/page.dart';
 import 'window.dart';
 
 void main() async {
-  runApp(const App());
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    await settings.loadSettings();
+  } catch (e) {
+    printText("Error loading settings: $e");
+  }
+
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => AppStateNotifier(),
+      child: const App(),
+    ),
+  );
 }
 
-class App extends StatefulWidget {
+class App extends StatelessWidget {
   const App({super.key});
 
   @override
-  State<App> createState() => AppState();
-}
-
-class AppState extends State<App> {
-  bool _isLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    try {
-      await settings.loadSettings();
-    } catch (e) {
-      printText("Error loading settings: $e");
-    }
-
-    setState(() {_isLoaded = true;});
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (!_isLoaded) {
-      return const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-
     return MaterialApp(
       title: "Vice",
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFF262626),
         primaryColor: const Color(0xFF262626),
       ),
-      home: const Window(),
+      home: const ScaledWindow(),
     );
+  }
+}
+
+class ScaledWindow extends StatelessWidget {
+  const ScaledWindow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AppStateNotifier>(
+      builder: (context, appState, _) {
+        final scale = settings.scale;
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final parentW = constraints.maxWidth;
+            final parentH = constraints.maxHeight;
+            final childW = parentW / scale;
+            final childH = parentH / scale;
+
+            return SizedBox.expand(
+              child: OverflowBox(
+                minWidth: childW,
+                maxWidth: childW,
+                minHeight: childH,
+                maxHeight: childH,
+                alignment: Alignment.topLeft,
+                child: Transform.scale(
+                  scale: scale,
+                  alignment: Alignment.topLeft,
+                  child: const Window(),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class AppStateNotifier extends ChangeNotifier {
+  void reload() {
+    notifyListeners();
   }
 }

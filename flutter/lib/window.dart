@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:vice/settings/page.dart';
+import 'invoke_js.dart';
+import 'settings/page.dart';
 import 'soundboard/page.dart';
 import 'channels/page.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 enum WindowPage { channels, soundboard, settings }
 
@@ -24,7 +26,7 @@ class _WindowState extends State<Window> {
           Align(
             alignment: Alignment.topCenter,
             child: Container(
-              width: MediaQuery.of(context).size.width,
+              width: context.size?.width == null ? MediaQuery.of(context).size.width : context.size!.width,
               height: 70,
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1F1F),
@@ -75,6 +77,36 @@ class _WindowState extends State<Window> {
                     onPressed: () => setState(() => _currentPage = WindowPage.settings),
                     child: Text("Settings", style: TextStyle(fontSize: 32)),
                   ),
+
+                  Spacer(),
+
+                  Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Version: ${settings.version}",
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFFFFFFFF)
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: Icon(FontAwesomeIcons.github, color: Color(0xFFFFFFFF)),
+                              onPressed: () async {
+                                await invokeJS("open_link", {"url": "https://github.com/GlowyGhost/Vice"});
+                              },
+                            )
+                          ],
+                        )
+                      ],
+                    )
+                  )
                 ],
               ),
             )

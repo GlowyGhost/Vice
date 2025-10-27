@@ -35,3 +35,6 @@ flutter/*.class
 flutter/*.log
 flutter/*.pyc
 flutter/*.swp
+
+# Rust Analyzer
+target/
