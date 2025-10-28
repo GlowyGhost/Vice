@@ -36,5 +36,8 @@ flutter/*.log
 flutter/*.pyc
 flutter/*.swp
 
-# Rust Analyzer
+# Rust
 target/
+src-tauri/target/
+src-tauri/gen/schemas
+updater/target/

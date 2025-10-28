@@ -28,12 +28,30 @@ class _SettingsPageState extends State<SettingsPage> {
     await settings.saveSettings(context);
   }
 
-  Future<void> _update() async {
-    //TODO: Update.
-  }
+  void showBar(String text) {
+		ScaffoldMessenger.of(context).showSnackBar(
+			SnackBar(content: Text(text)),
+		);
+	}
 
   Future<void> _uninstall() async {
-    //TODO: Uninstall.
+    String res = await invokeJS("uninstall");
+
+    if (res == "Undid") {
+      showBar("Cancelled Uninstall");
+    }
+  }
+
+  Future<void> _update() async {
+    String res = await invokeJS("update");
+
+    if (res == "Undid") {
+      showBar("Cancelled Update.");
+    } else if (res == "No Update") {
+      showBar("There currently is no new availiable update.");
+    } else if (res == "No Internet") {
+      showBar("No Internet Connection.");
+    }
   }
 
   @override

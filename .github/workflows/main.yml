@@ -30,10 +30,46 @@ jobs:
           name: flutter-build
           path: flutter/build/web
   
+  updater:
+    name: Build updater
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build Updater
+        shell: bash
+        run: |
+          cd src-tauri/updater
+          cargo build -r
+
+      - name: Upload updater (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.os }}
+          path: src-tauri/updater/target/release/updater.exe
+
+      - name: Upload updater (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.os }}
+          path: src-tauri/updater/target/release/updater
+  
   debug:
     name: Build Debug App
     runs-on: ${{ matrix.os }}
-    needs: [flutter]
+    needs: [flutter, updater]
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -100,6 +136,12 @@ jobs:
           choco install mingw -y
           refreshenv
 
+      - name: Download Updater
+        uses: actions/download-artifact@v4
+        with:
+          name: updater-${{ matrix.os }}
+          path: stc-tauri/updater/target/release
+
       - name: Build Tauri app
         shell: bash
         run: |
@@ -137,7 +179,7 @@ jobs:
   app:
     name: Build Tauri App
     runs-on: ${{ matrix.os }}
-    needs: [flutter]
+    needs: [flutter, updater]
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -195,6 +237,12 @@ jobs:
         run: |
           choco install mingw -y
           refreshenv
+
+      - name: Download Updater
+        uses: actions/download-artifact@v4
+        with:
+          name: updater-${{ matrix.os }}
+          path: stc-tauri/updater/target/release
 
       - name: Build Tauri app
         shell: bash

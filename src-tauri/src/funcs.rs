@@ -1,3 +1,8 @@
+use std::net::TcpStream;
+use std::time::Duration;
+use rfd::{MessageDialog, MessageDialogResult};
+use serde::Deserialize;
+
 use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
 
@@ -160,4 +165,71 @@ pub(crate) fn play_sound(sound: String, low: bool) {
 #[tauri::command]
 pub(crate) fn flutter_print(text: &str) {
     println!("{}", text)
+}
+
+#[tauri::command]
+pub(crate) fn uninstall() -> Result<String, String> {
+    let res = MessageDialog::new()
+        .set_title("Uninstall")
+        .set_description("Are you sure you want to uninstall Luauncher?")
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+
+    if res == MessageDialogResult::Yes {
+        return files::extract_updater("uninstall", std::env::current_exe().unwrap(), "false");
+    }
+    Ok("Undid".to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn update() -> Result<String, String> {
+    #[derive(Deserialize)]
+    struct Release {
+        name: String
+    }
+
+    let connected = TcpStream::connect_timeout(
+        &("1.1.1.1:80".parse().unwrap()),
+        Duration::from_secs(2)
+    ).is_ok();
+
+    if connected == false {
+        return Ok("No Internet".to_string());
+    }
+
+    let url = "https://api.github.com/repos/GlowyGhost/Vice/releases/latest";
+
+    let client = reqwest::Client::new();
+    let mut res = client
+        .get(url)
+        .header("User-Agent", "Vice-app")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<Release>()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    res.name.remove(0);
+
+    if res.name == env!("CARGO_PKG_VERSION") {
+        return Ok("No Update".to_string());
+    }
+
+    let res_msg = MessageDialog::new()
+        .set_title("Update")
+        .set_description(format!("Are you sure you want to update Vice from {} to {}?", env!("CARGO_PKG_VERSION"), res.name))
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+
+    if res_msg == MessageDialogResult::Yes {
+        #[cfg(debug_assertions)]
+        let debug = "true";
+
+        #[cfg(not(debug_assertions))]
+        let debug = "false";
+
+        return files::extract_updater("update", std::env::current_exe().unwrap(), debug);
+    }
+    Ok("Undid".to_string())
 }

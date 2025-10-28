@@ -1,7 +1,9 @@
 use std::{
-    env, fs, path::PathBuf
+    env, fs, io::Write, path::PathBuf, process::Command
 };
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
 pub(crate) struct SoundboardSFX {
@@ -36,6 +38,12 @@ pub(crate) struct File {
     pub(crate) settings: Settings,
 }
 
+#[cfg(target_os = "windows")]
+const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater.exe");
+
+#[cfg(target_os = "linux")]
+const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater");
+
 fn app_base() -> PathBuf {
     #[cfg(target_os = "windows")]
     let base: String = env::var("APPDATA").unwrap_or("Error occured when getting App Base".to_string());
@@ -62,7 +70,8 @@ pub(crate) fn create_files() {
     let file_path: PathBuf = settings_json();
 
     if !file_path.exists() {
-        let default_file: File = File::default();
+        let mut default_file: File = File::default();
+        default_file.settings.scale = 1.0;
 
         match serde_json::to_string_pretty(&default_file) {
             Ok(json) => {
@@ -153,4 +162,33 @@ pub(crate) fn save_settings(settings: Settings) -> Result<(), String> {
     let mut file: File = get_file();
     file.settings = settings;
     return save_file(&file);
+}
+
+pub(crate) fn extract_updater(arg: &str, path: PathBuf, debug: &str) -> Result<String, String> {
+    let mut temp_path = env::temp_dir();
+
+    #[cfg(target_os = "windows")]
+    let filename = "Vice-Uninstaller-".to_string()+&Uuid::new_v4().to_string()+".exe";
+    #[cfg(any(target_os = "linux"))]
+    let filename = "Vice-Uninstaller-".to_string()+&Uuid::new_v4().to_string();
+
+    temp_path.push(&filename);
+
+    let mut file = fs::File::create(&temp_path).unwrap();
+    let _ = file.write_all(EMBEDDED_BIN);
+
+    #[cfg(unix)]
+    {
+        let perms = fs::metadata(&temp_path)
+            .map_err(|e| e.to_string())?
+            .permissions();
+
+        fs::set_permissions(&temp_path, perms).map_err(|e| e.to_string())?;
+    }
+
+    let _ = Command::new("cmd")
+        .args(["/C", "start", "", &temp_path.to_string_lossy().to_string(), arg, &path.to_string_lossy().to_string(), debug])
+        .spawn();
+
+    Ok(filename)
 }
