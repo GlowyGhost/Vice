@@ -25,10 +25,7 @@ class _SettingsPageState extends State<SettingsPage> {
 	}
 
   Future<void> _save() async {
-    await settings.saveSettings();
-
-    final appState = Provider.of<AppStateNotifier>(context, listen: false);
-    appState.reload();
+    await settings.saveSettings(context);
   }
 
   Future<void> _update() async {
@@ -170,8 +167,11 @@ class SettingsData extends ChangeNotifier {
     settings.version = version;
   }
 
-	Future<void> saveSettings() async {
+	Future<void> saveSettings(BuildContext context) async {
 		await invokeJS("save_settings", {"output": outputDevice, "scale": scale});
+
+    final appState = Provider.of<AppStateNotifier>(context, listen: false);
+    appState.reload();
 	}
 }
 

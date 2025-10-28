@@ -26,7 +26,7 @@ class _WindowState extends State<Window> {
           Align(
             alignment: Alignment.topCenter,
             child: Container(
-              width: context.size?.width == null ? MediaQuery.of(context).size.width : context.size!.width,
+              width: MediaQuery.of(context).size.width,
               height: 70,
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1F1F),
