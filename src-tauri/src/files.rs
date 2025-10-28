@@ -3,7 +3,6 @@ use std::{
     path::PathBuf, process::Command
 };
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "windows")]
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]

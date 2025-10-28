@@ -140,7 +140,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: stc-tauri/updater/target/release
+          path: src-tauri/updater/target/release
 
       - name: Build Tauri app
         shell: bash
@@ -242,7 +242,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: stc-tauri/updater/target/release
+          path: src-tauri/updater/target/release
 
       - name: Build Tauri app
         shell: bash
