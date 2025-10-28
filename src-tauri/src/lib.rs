@@ -1,5 +1,6 @@
 use tauri::{
-    menu::{Menu, MenuItem}, tray::{TrayIcon, TrayIconBuilder}, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent
+    menu::{Menu, MenuItem}, tray::{TrayIcon, TrayIconBuilder},
+    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent
 };
 
 mod files;

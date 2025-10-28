@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../settings/page.dart';
 import 'edit_page.dart';
 import 'main_page.dart';
 import 'new_page.dart';
@@ -23,6 +24,10 @@ class _ChannelsManagerState extends State<ChannelsManagerDisplay> {
               child: Row(
                 children: [
                   ElevatedButton.icon(
+                    style: TextButton.styleFrom(
+                      backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
+                      foregroundColor: Colors.purpleAccent
+                    ),
                     onPressed: () => {ChannelsPageClass.setPage(ChannelsNew())},
                     icon: const Icon(Icons.add),
                     label: Text("Add"),

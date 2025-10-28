@@ -12,7 +12,7 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
     final promise = _invoke(cmd, jsArgs);
     final result = await js_util.promiseToFuture(promise);
 
-    if (result is String) {
+    if (result is String || result is bool) {
       return result;
     } else if (result == null) {
       return null;

@@ -673,7 +673,7 @@ extern "C" {
                     strcpy(copy.get(), name.c_str());
                     c_strs.push_back(copy.get());
                     c_copies.push_back(std::move(copy));
-               }
+                }
             }
             CloseHandle(hProcess);
         }

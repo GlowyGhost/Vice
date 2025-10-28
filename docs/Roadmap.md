@@ -2,11 +2,13 @@
 
 Please if you're planning to contributing. Add what you're doing in the roadmap or say you're debugging. When you're completed with your pull request, edit the roadmap to say that it's completed.
 
-|Idea|Stage|Date Last Updated|Notes|
+|Idea|Explanation|Stage|Date Last Updated|
 |----|-----|----|-----|
-|UI|Completed|20/09/2025|Small details need to be completed.|
-|Rust and Flutter linking|Completed|20/09/2025|Everything is completed currently.|
-|C++ Audio Engine|Completed|19/10/2025|
-|Device Capture|Completed|27/09/2025|
-|App Capture|Completed|19/10/2025|
-|Resampling|Completed|19/10/2025|
+|Support to other audio files|Sound effects will be able to be files like: mp3, aac, wma, flac, alac, aiff, ogg, m4a, mpeg|
+|More Icons|More Icons.|
+|Visual audio volume|In the channel page, each channel will show volume. May be not possible.|
+|Performence monitor|Shows the amount of RAM, CPU, GPU that Vice is using.|
+|Visual Scripter|A system to put effects on audio. Kind of like the blueprint system in Unreal Engine or Fusion page in Davinci Resolve.|
+|Thread/Channel Sleeping|When the output device is not in use, the thread managing it will stop, until a device connects to the output.|
+|AI Noise Reduction|A toggle or node in channels to reduce background noise.|
+|Virtual Mic|For Windows, an option to install a virtual mic. Either having the file to run the mic next to the save data or next to the WebView Cache.|

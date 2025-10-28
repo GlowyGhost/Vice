@@ -13,6 +13,9 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final ScrollController scrollController = ScrollController();
+  String outputDevice = "Please wait";
+  double scale = 2147483647.0;
+  bool lightMode = false;
 
   @override
   void initState() {
@@ -22,9 +25,21 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _init() async {
 		await settings.loadSettings();
+
+    setState(() {
+      outputDevice = settings.outputDevice;
+      scale = settings.scale;
+      lightMode = settings.lightMode;
+    });
 	}
 
   Future<void> _save() async {
+    setState(() {
+      settings.outputDevice = outputDevice;
+      settings.scale = scale;
+      settings.lightMode = lightMode;
+    });
+
     await settings.saveSettings(context);
   }
 
@@ -60,13 +75,17 @@ class _SettingsPageState extends State<SettingsPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 5),
+            padding: EdgeInsets.only(top: 12, left: 8, bottom: 4),
             child: Row(
               children: [
                 ElevatedButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
+                    foregroundColor: Colors.purpleAccent
+                  ),
                   onPressed: _save,
                   icon: const Icon(Icons.save),
-                  label: Text("Save", style: TextStyle(fontSize: 18))
+                  label: Text("Save")
                 )
               ],
             )
@@ -97,12 +116,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                   builder: (context) => DeviceDropdown(
                                     devices: settings.devices,
                                     onDeviceSelected: (optionSelected) {
-                                      setState(() {settings.outputDevice = optionSelected;});
+                                      setState(() {outputDevice = optionSelected;});
                                     },
                                   ),
                                 );
                               },
-                              child: Text(settings.outputDevice, style: TextStyle(fontSize: 30, color: Colors.white))
+                              child: Text(outputDevice, style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)))
                             ),
                           )
                         ],
@@ -115,17 +134,27 @@ class _SettingsPageState extends State<SettingsPage> {
                           Text("Scale:    ", style: TextStyle(fontSize: 30, color: Colors.grey)),
                           Expanded(
                             child: Slider(
-                              value: settings.scale,
+                              value: scale,
                               min: 0.1,
                               max: 2.0,
                               divisions: 19,
-                              label: settings.scale.toStringAsFixed(1),
+                              label: scale.toStringAsFixed(1),
                               onChanged: (newScale) {
-                                setState(() {settings.scale = newScale;});
+                                setState(() {scale = newScale;});
                               }
                             )
                           )
                         ],
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      SwitchListTile(
+                        title: Text("Light mode:     ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        value: lightMode,
+                        onChanged: (value) {
+                          setState(() => lightMode = value);
+                        },
                       ),
                     ],
                   ),
@@ -143,7 +172,7 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             TextButton(
               onPressed: () => _update(),
-              child: Text("Update", style: TextStyle(fontSize: 24, color: Color(0xFFFFFFFF))),
+              child: Text("Update", style: TextStyle(fontSize: 24, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
             ),
 
             const SizedBox(height: 20),
@@ -164,11 +193,13 @@ class SettingsData extends ChangeNotifier {
   List<String> devices = ["Please wait"];
   double scale = 2147483647.0;
   String version = "Please wait";
+  bool lightMode = false;
 
 	Future<void> loadSettings() async {
 		final settings = await invokeJS('get_settings');
 		
     scale = settings["scale"];
+    lightMode = settings["light"];
     if (settings["output"] != null && settings["output"].trim().isNotEmpty) {
       outputDevice = settings["output"];
     }
@@ -186,7 +217,7 @@ class SettingsData extends ChangeNotifier {
   }
 
 	Future<void> saveSettings(BuildContext context) async {
-		await invokeJS("save_settings", {"output": outputDevice, "scale": scale});
+		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode});
 
     final appState = Provider.of<AppStateNotifier>(context, listen: false);
     appState.reload();

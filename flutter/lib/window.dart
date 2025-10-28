@@ -20,7 +20,6 @@ class _WindowState extends State<Window> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF262626),
       body: Column(
         children: [
           Align(
@@ -29,7 +28,9 @@ class _WindowState extends State<Window> {
               width: MediaQuery.of(context).size.width,
               height: 70,
               decoration: BoxDecoration(
-                color: const Color(0xFF1F1F1F),
+                color: settings.lightMode
+                  ? const Color(0xFFA1A1A1)
+                  : const Color(0xFF1F1F1F),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(36),
                   bottomRight: Radius.circular(36),
@@ -40,9 +41,13 @@ class _WindowState extends State<Window> {
                 children: [
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.channels ? 
-                        Color(0xFFFFFFFF)
-                        : Color(0xFFB3B3B3),
+                      foregroundColor: _currentPage == WindowPage.channels
+                        ? settings.lightMode
+                          ? Color(0xFF000000)
+                          : Color(0xFFFFFFFF)
+                        : settings.lightMode
+                          ? Color(0x2E2E2E2E)
+                          : Color(0xD1D1D1D1),
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -54,9 +59,13 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.soundboard ? 
-                        Color(0xFFFFFFFF)
-                        : Color(0xFFB3B3B3),
+                      foregroundColor: _currentPage == WindowPage.soundboard
+                        ? settings.lightMode
+                          ? Color(0xFF000000)
+                          : Color(0xFFFFFFFF)
+                        : settings.lightMode
+                          ? Color(0x2E2E2E2E)
+                          : Color(0XFFB3B3B3),
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -68,9 +77,13 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.settings ? 
-                        Color(0xFFFFFFFF)
-                        : Color(0xFFB3B3B3),
+                      foregroundColor: _currentPage == WindowPage.settings
+                        ? settings.lightMode
+                          ? Color(0xFF000000)
+                          : Color(0xFFFFFFFF)
+                        : settings.lightMode
+                          ? Color(0x2E2E2E2E)
+                          : Color(0XFFB3B3B3),
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -89,7 +102,9 @@ class _WindowState extends State<Window> {
                           "Version: ${settings.version}",
                           style: TextStyle(
                             fontSize: 16,
-                            color: Color(0xFFFFFFFF)
+                            color: settings.lightMode
+                              ? Color(0xFF000000)
+                              : Color(0xFFFFFFFF)
                           ),
                         ),
                         Row(
@@ -97,7 +112,9 @@ class _WindowState extends State<Window> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             IconButton(
-                              icon: Icon(FontAwesomeIcons.github, color: Color(0xFFFFFFFF)),
+                              icon: Icon(FontAwesomeIcons.github, color: settings.lightMode
+                                ? Color(0xFF000000)
+                                : Color(0xFFFFFFFF)),
                               onPressed: () async {
                                 await invokeJS("open_link", {"url": "https://github.com/GlowyGhost/Vice"});
                               },
@@ -114,7 +131,9 @@ class _WindowState extends State<Window> {
 
           Expanded(
             child: Container(
-              color: const Color(0xFF262626),
+              color: settings.lightMode
+                ? const Color(0xFFCCCCCC)
+                : const Color(0xFF262626),
               child: switch (_currentPage) {
                 WindowPage.channels => ChannelsManagerDisplay(),
                 WindowPage.soundboard => SoundboardManagerDisplay(),

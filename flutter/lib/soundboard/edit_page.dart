@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../icons.dart';
 import '../invoke_js.dart';
+import '../settings/page.dart';
 import 'main_page.dart';
 import 'page.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -138,13 +139,13 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                   Expanded(
                     child: TextField(
                       controller: controllerName,
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
                         labelText: "Enter name",
-                        labelStyle: TextStyle(color: Colors.white),
+                        labelStyle: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
                         filled: true,
-                        fillColor: Color(0xFF363636),
+                        fillColor: settings.lightMode ? const Color(0xFF999999) : const Color(0xFF363636),
                       ),
                     ),
                   ),
@@ -157,7 +158,7 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                 children: [
                   IconButton(
                     icon: Icon(getIcon(icon)),
-                    color: Colors.white,
+                    color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF),
                     iconSize: 96,
                     onPressed: () {
                       showDialog(
@@ -180,13 +181,13 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                         Expanded(
                           child: TextField(
                             controller: controllerSound,
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
                               labelText: "Enter Sound Effect",
-                              labelStyle: TextStyle(color: Colors.white),
+                              labelStyle: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
                               filled: true,
-                              fillColor: Color(0xFF363636),
+                              fillColor: settings.lightMode ? const Color(0xFF999999) : const Color(0xFF363636),
                             ),
                           )
                         ),
@@ -195,7 +196,7 @@ class _SoundboardEditState extends State<SoundboardEdit> {
 
                         IconButton(
                           onPressed: () async => {controllerSound.text = await invokeJS("pick_menu_sound")},
-                          icon: Icon(Icons.menu, color: Colors.white, size: 96)
+                          icon: Icon(Icons.menu, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF), size: 96)
                         )
                       ],
                     )
@@ -206,7 +207,7 @@ class _SoundboardEditState extends State<SoundboardEdit> {
               const SizedBox(height: 20),
 
               SwitchListTile(
-                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: Colors.white)),
+                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                 value: lowlatency,
                 onChanged: (value) {
                   setState(() => lowlatency = value);
@@ -222,6 +223,10 @@ class _SoundboardEditState extends State<SoundboardEdit> {
 				child: Row(
 					children: [
 						ElevatedButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
+                foregroundColor: Colors.purpleAccent
+              ),
 							onPressed: _save,
 							icon: const Icon(Icons.save),
 							label: Text("Save", style: TextStyle(fontSize: 18))
@@ -230,6 +235,10 @@ class _SoundboardEditState extends State<SoundboardEdit> {
             const SizedBox(width: 16),
 
             ElevatedButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
+                foregroundColor: Colors.purpleAccent
+              ),
 							onPressed: () => {SoundboardPageClass.setPage(SoundboardMain())},
 							icon: const Icon(Icons.undo_rounded),
 							label: Text("Back", style: TextStyle(fontSize: 18))
@@ -238,6 +247,10 @@ class _SoundboardEditState extends State<SoundboardEdit> {
             const SizedBox(width: 16),
 
             ElevatedButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
+                foregroundColor: Colors.purpleAccent
+              ),
 							onPressed: _delete,
 							icon: const Icon(Icons.delete),
 							label: Text("Delete", style: TextStyle(fontSize: 18))

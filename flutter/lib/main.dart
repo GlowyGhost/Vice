@@ -26,13 +26,21 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: "Vice",
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF262626),
-        primaryColor: const Color(0xFF262626),
-      ),
-      home: const ScaledWindow(),
+    return Consumer<AppStateNotifier>(
+      builder: (context, appState, _) {
+        return MaterialApp(
+          title: "Vice",
+          theme: ThemeData(
+            scaffoldBackgroundColor: settings.lightMode
+                ? const Color(0xFFCCCCCC)
+                : const Color(0xFF262626),
+            primaryColor: settings.lightMode
+                ? const Color(0xFFCCCCCC)
+                : const Color(0xFF262626),
+          ),
+          home: const ScaledWindow(),
+        );
+      },
     );
   }
 }

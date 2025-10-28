@@ -41,3 +41,4 @@ target/
 src-tauri/target/
 src-tauri/gen/schemas
 updater/target/
+src-tauri/.gitignore

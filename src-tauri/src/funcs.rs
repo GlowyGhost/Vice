@@ -111,10 +111,11 @@ pub(crate) fn get_apps() -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn save_settings(output: String, scale: f32) -> Result<(), String> {
+pub(crate) fn save_settings(output: String, scale: f32, light: bool) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
     settings.output = output;
     settings.scale = scale;
+    settings.light = light;
 
     files::save_settings(settings).map(|_| audio::restart())
 }

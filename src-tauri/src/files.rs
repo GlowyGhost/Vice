@@ -1,5 +1,6 @@
 use std::{
-    env, fs, io::Write, path::PathBuf, process::Command
+    env, fs, io::Write,
+    path::PathBuf, process::Command
 };
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
@@ -29,6 +30,7 @@ pub(crate) struct Channel {
 pub(crate) struct Settings {
     pub(crate) output: String,
     pub(crate) scale: f32,
+    pub(crate) light: bool
 }
 
 #[derive(Deserialize, Serialize, Default)]
