@@ -9,7 +9,7 @@
 
 ## How To Install
 
-1. Have a virtual microphone. Recommended to use [Steelseries Sonar GG](https://steelseries.com/gg/sonar) or [VB-Cable](https://vb-audio.com/Cable) (For Windows).
+1. Have a virtual microphone. Recommended to use [VB-Cable](https://vb-audio.com/Cable) for Windows or create one via PulseAudio/PipeWire for Linux.
 2. Install Vice.
 3. Make Vice output to the new audio device.
 4. Make other apps/games to use the audio device
