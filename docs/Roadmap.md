@@ -4,7 +4,7 @@ Please if you're planning to contributing. Add what you're doing in the roadmap 
 
 |Idea|Explanation|Stage|Date Last Updated|
 |----|-----|----|-----|
-|Support to other audio files|Sound effects will be able to be files like: mp3, aac, wma, flac, alac, aiff, ogg, m4a, mpeg|
+|Support to other audio files|Sound effects will be able to be files like: mp3, aac, wma, flac, alac, aiff, ogg, m4a, mpeg|Done|30/10/2025|
 |More Icons|More Icons.|
 |Visual audio volume|In the channel page, each channel will show volume. May be not possible.|
 |Performence monitor|Shows the amount of RAM, CPU, GPU that Vice is using.|

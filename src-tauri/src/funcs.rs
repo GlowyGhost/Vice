@@ -44,7 +44,7 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
         eprintln!("Channel '{}' not found", oldname);
         return Err(format!("Channel '{}' not found", oldname));
     }
-            
+    
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
@@ -58,7 +58,7 @@ pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound:
         eprintln!("Soundeffect '{}' not found", oldname);
         return Err(format!("Soundeffect '{}' not found", oldname));
     }
-            
+    
     return files::save_soundboard(sfxs);
 }
 
@@ -71,7 +71,7 @@ pub(crate) fn delete_channel(name: String) -> Result<(), String> {
     } else {
         return Err(format!("Channel '{}' not found", name));
     }
-            
+    
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
@@ -84,14 +84,19 @@ pub(crate) fn delete_sound(name: String) -> Result<(), String> {
     } else {
         return Err(format!("Soundeffect '{}' not found", name));
     }
-            
+    
     return files::save_soundboard(sfxs);
 }
 
 #[tauri::command]
 pub(crate) fn pick_menu_sound() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    let formats: [&str; 6] = ["wav", "mp3", "wma", "aac", "m4a", "flac"];
+    #[cfg(target_os = "linux")]
+    let formats: [&str; 11] = ["wav", "mp3", "wma", "aac", "m4a", "flac", "ogg", "opus", "alac", "aiff", "aif"];
+
     if let Some(path) = rfd::FileDialog::new()
-        .add_filter("Sound Files", &["wav"])
+        .add_filter("Sound Files", &formats)
         .pick_file()
     {
         Some(path.to_string_lossy().to_string())

@@ -22,17 +22,24 @@
 #include <propvarutil.h>
 #include <tlhelp32.h>
 #include <wtsapi32.h>
+#include <mfapi.h>
+#include <mfobjects.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
+#include <mftransform.h>
 #else
 #include <alsa/asoundlib.h>
 #include <dirent.h>
 #include <unistd.h>
-#include <fstream>
 #include <pulse/pulseaudio.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
 #include <cstring>
 #include <mutex>
 #include <memory>
+#include <gst/gst.h>
+#include <gst/app/gstappsink.h>
 #endif
 #pragma endregion
 
@@ -54,50 +61,174 @@ std::string wideToUtf8(const wchar_t* wstr) {
 }
 #endif
 
-struct WAVData {
+struct PCMData {
     char* buffer = nullptr;
     size_t bufferSize = 0;
     int sampleRate = 0;
     int channels = 0;
 };
 
-WAVData loadWav(const char* filename) {
-    std::ifstream f(filename, std::ios::binary);
-    WAVData wav;
-    if (!f) return wav;
+struct PCMResult {
+    PCMData pcm;
+    int result; // 0 = success, 1 = unknown format, 2 = file error
+};
 
-    char riff[4]; f.read(riff, 4);
-    if (std::strncmp(riff, "RIFF", 4) != 0) return wav;
-    f.seekg(4, std::ios::cur);
-    char wave[4]; f.read(wave, 4);
-    if (std::strncmp(wave, "WAVE", 4) != 0) return wav;
+PCMResult loadPCM(const char* filename) {
+    std::string lower(filename);
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
-    while (f) {
-        char chunkId[4]; uint32_t chunkSize = 0;
-        f.read(chunkId, 4);
-        f.read(reinterpret_cast<char*>(&chunkSize), 4);
-        if (!f) break;
+    if (lower.size() >= 4 && lower.compare(lower.size() - 4, 4, ".wav") == 0) {
+        std::ifstream f(filename, std::ios::binary);
+        if (!f) return { {}, 2 };
 
-        if (std::strncmp(chunkId, "fmt ", 4) == 0) {
-            uint16_t audioFormat, channels, blockAlign, bitsPerSample;
-            uint32_t sampleRate, byteRate;
-            f.read(reinterpret_cast<char*>(&audioFormat), 2);
-            f.read(reinterpret_cast<char*>(&channels), 2);
-            f.read(reinterpret_cast<char*>(&sampleRate), 4);
-            f.read(reinterpret_cast<char*>(&byteRate), 4);
-            f.read(reinterpret_cast<char*>(&blockAlign), 2);
-            f.read(reinterpret_cast<char*>(&bitsPerSample), 2);
-            if (chunkSize > 16) f.seekg(chunkSize - 16, std::ios::cur);
-            wav.channels = channels;
-            wav.sampleRate = sampleRate;
-        } else if (std::strncmp(chunkId, "data", 4) == 0) {
-            wav.bufferSize = chunkSize;
-            wav.buffer = new char[chunkSize];
-            f.read(wav.buffer, chunkSize);
-            break;
-        } else f.seekg(chunkSize, std::ios::cur);
+        char riff[4]; f.read(riff, 4);
+        if (std::strncmp(riff, "RIFF", 4) != 0) return { {}, 2 };
+        f.seekg(4, std::ios::cur);
+        char wave[4]; f.read(wave, 4);
+        if (std::strncmp(wave, "WAVE", 4) != 0) return { {}, 2 };
+
+
+        PCMData pcm;
+        while (f) {
+            char chunkId[4];
+            uint32_t chunkSize = 0;
+            f.read(chunkId, 4);
+            f.read(reinterpret_cast<char*>(&chunkSize), 4);
+            if (!f) break;
+
+            if (std::strncmp(chunkId, "fmt ", 4) == 0) {
+                uint16_t audioFormat, channels, blockAlign, bitsPerSample;
+                uint32_t sampleRate, byteRate;
+                f.read(reinterpret_cast<char*>(&audioFormat), 2);
+                f.read(reinterpret_cast<char*>(&channels), 2);
+                f.read(reinterpret_cast<char*>(&sampleRate), 4);
+                f.read(reinterpret_cast<char*>(&byteRate), 4);
+                f.read(reinterpret_cast<char*>(&blockAlign), 2);
+                f.read(reinterpret_cast<char*>(&bitsPerSample), 2);
+                if (chunkSize > 16) f.seekg(chunkSize - 16, std::ios::cur);
+                pcm.channels = channels;
+                pcm.sampleRate = sampleRate;
+            } else if (std::strncmp(chunkId, "data", 4) == 0) {
+                pcm.bufferSize = chunkSize;
+                pcm.buffer = new char[chunkSize];
+                f.read(pcm.buffer, chunkSize);
+                break;
+            } else f.seekg(chunkSize, std::ios::cur);
+        }
+        return { pcm, 0 };
     }
-    return wav;
+
+    #ifdef _WIN32
+    HRESULT hr = MFStartup(MF_VERSION);
+    if (FAILED(hr)) return { {}, 1 };
+
+    IMFSourceReader* reader = nullptr;
+    std::wstring wfilename(filename, filename + strlen(filename));
+    hr = MFCreateSourceReaderFromURL(wfilename.c_str(), nullptr, &reader);
+    if (FAILED(hr) || !reader) return { {}, 1 };
+
+    IMFMediaType* audioTypeOut = nullptr;
+    hr = MFCreateMediaType(&audioTypeOut);
+    if (FAILED(hr) || !audioTypeOut) {
+        reader->Release();
+        return { {}, 1 };
+    }
+
+    audioTypeOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+    audioTypeOut->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+    reader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, audioTypeOut);
+
+    IMFMediaType* pOutType = nullptr;
+    reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, &pOutType);
+
+    UINT32 sampleRate = MFGetAttributeUINT32(pOutType, MF_MT_AUDIO_SAMPLES_PER_SECOND, 44100);
+    UINT32 channels   = MFGetAttributeUINT32(pOutType, MF_MT_AUDIO_NUM_CHANNELS, 2);
+
+    std::vector<char> pcmData;
+
+    while (true) {
+        DWORD streamIndex, flags;
+        LONGLONG timestamp;
+        IMFSample* sample = nullptr;
+        hr = reader->ReadSample(MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, &streamIndex, &flags, &timestamp, &sample);
+        if (FAILED(hr) || (flags & MF_SOURCE_READERF_ENDOFSTREAM)) break;
+        if (!sample) continue;
+
+        IMFMediaBuffer* buffer = nullptr;
+        hr = sample->ConvertToContiguousBuffer(&buffer);
+        if (SUCCEEDED(hr) && buffer) {
+            BYTE* audioData = nullptr;
+            DWORD audioDataLen = 0;
+            buffer->Lock(&audioData, nullptr, &audioDataLen);
+
+            size_t oldSize = pcmData.size();
+            pcmData.resize(oldSize + audioDataLen);
+            memcpy(pcmData.data() + oldSize, audioData, audioDataLen);
+
+            buffer->Unlock();
+            buffer->Release();
+        }
+        sample->Release();
+    }
+
+    if (pOutType) pOutType->Release();
+    if (audioTypeOut) audioTypeOut->Release();
+    if (reader) reader->Release();
+    MFShutdown();
+
+    PCMData pcm{};
+    pcm.bufferSize = pcmData.size();
+    pcm.buffer = new char[pcm.bufferSize];
+    memcpy(pcm.buffer, pcmData.data(), pcm.bufferSize);
+    pcm.channels = channels;
+    pcm.sampleRate = sampleRate;
+    return { pcm, 0 };
+    #else
+    gst_init(nullptr, nullptr);
+    std::string pipelineStr = std::string("filesrc location=\"") + filename + "\" ! decodebin ! audioconvert ! audioresample ! appsink name=sink";
+    GError* err = nullptr;
+    GstElement* pipeline = gst_parse_launch(pipelineStr.c_str(), &err);
+    if (!pipeline) return { {}, 1 };
+
+    GstElement* sink = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+    gst_element_get_state(pipeline, nullptr, nullptr, GST_CLOCK_TIME_NONE);
+
+    std::vector<char> pcmData;
+    int sampleRate = 0;
+    int channels = 0;
+
+    GstCaps* caps = gst_app_sink_get_caps(GST_APP_SINK(sink));
+    if (caps) {
+        GstStructure* s = gst_caps_get_structure(caps, 0);
+        gst_structure_get_int(s, "rate", &sampleRate);
+        gst_structure_get_int(s, "channels", &channels);
+        gst_caps_unref(caps);
+    }
+
+    while (true) {
+        GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));
+        if (!sample) break;
+        GstBuffer* buffer = gst_sample_get_buffer(sample);
+        GstMapInfo map;
+        gst_buffer_map(buffer, &map, GST_MAP_READ);
+        pcmData.insert(pcmData.end(), map.data, map.data + map.size);
+        gst_buffer_unmap(buffer, &map);
+        gst_sample_unref(sample);
+    }
+
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(sink);
+    gst_object_unref(pipeline);
+
+    PCMData pcm{};
+    pcm.bufferSize = pcmData.size();
+    pcm.buffer = new char[pcm.bufferSize];
+    memcpy(pcm.buffer, pcmData.data(), pcm.bufferSize);
+    pcm.sampleRate = sampleRate;
+    pcm.channels = channels;
+    return { pcm, 0 };
+    #endif
 }
 
 #ifdef _WIN32
@@ -771,11 +902,27 @@ extern "C" {
     }
     #pragma endregion
     #pragma region Play Sound
-    void play_sound(const char* wav_file, const char* device_name, bool low_latency) {
-        WAVData wav = loadWav(wav_file);
-        if (!wav.buffer || wav.channels <= 0) {
-            std::cerr << "Failed to load WAV: " << wav_file << "\n";
-            return;
+    void play_sound(const char* file, const char* device_name, bool low_latency) {
+        PCMResult result = loadPCM(file);
+        if (result.result != 0) {
+            if (result.result == 1) {
+                std::cerr << "Failed to load " << file << ": Unrecognized file format\n";
+                return;
+            } else {
+                std::cerr << "Failed to load " << file << ": File doesn't exist or the file is in use\n";
+                return;
+            }
+        }
+
+        PCMData pcm = result.pcm;
+        if (!pcm.buffer || pcm.channels <= 0) {
+            if (!pcm.buffer) {
+                std::cerr << "Failed to load " << file << ": No audio data\n";
+                return;
+            } else {
+                std::cerr << "Failed to load " << file << ": No channels\n";
+                return;
+            }
         }
 
         #ifdef _WIN32
@@ -790,7 +937,11 @@ extern "C" {
             pEnum->Release();
         }
 
-        if (!targetDevice) { std::cerr << "No audio device found\n"; CoUninitialize(); return; }
+        if (!targetDevice) {
+            std::cerr << "No audio device found\n";
+            CoUninitialize();
+            return;
+        }
 
         IAudioClient* audioClient = nullptr;
         if (FAILED(targetDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&audioClient))) {
@@ -800,17 +951,20 @@ extern "C" {
         WAVEFORMATEX* pwfx = nullptr;
         if (FAILED(audioClient->GetMixFormat(&pwfx)) || !pwfx) {
             std::cerr << "GetMixFormat failed\n";
-            audioClient->Release(); targetDevice->Release(); CoUninitialize(); return;
+            audioClient->Release();
+            targetDevice->Release();
+            CoUninitialize();
+            return;
         }
 
-        const int16_t* src16 = reinterpret_cast<const int16_t*>(wav.buffer);
-        size_t srcFrames = wav.bufferSize / (wav.channels * sizeof(int16_t));
-        float* srcFloat = int16_to_float(src16, srcFrames, wav.channels);
+        const int16_t* src16 = reinterpret_cast<const int16_t*>(pcm.buffer);
+        size_t srcFrames = pcm.bufferSize / (pcm.channels * sizeof(int16_t));
+        float* srcFloat = int16_to_float(src16, srcFrames, pcm.channels);
 
         size_t resampledFrames = 0;
-        float* resampled = linear_resample_interleaved(srcFloat, srcFrames, wav.channels, wav.sampleRate, pwfx->nSamplesPerSec, &resampledFrames);
+        float* resampled = linear_resample_interleaved(srcFloat, srcFrames, pcm.channels, pcm.sampleRate, pwfx->nSamplesPerSec, &resampledFrames);
 
-        float* finalBuffer = remap_channels_interleaved(resampled, resampledFrames, wav.channels, pwfx->nChannels);
+        float* finalBuffer = remap_channels_interleaved(resampled, resampledFrames, pcm.channels, pwfx->nChannels);
 
         size_t bytesPerSample = pwfx->wBitsPerSample / 8;
         size_t bytesPerFrame = pwfx->nChannels * bytesPerSample;
@@ -890,7 +1044,7 @@ extern "C" {
         snd_pcm_t* handle = find_device_by_name(true, device_name);
         if (!handle) {
             std::cerr << "Failed to open ALSA device: " << device_name << "\n";
-            delete[] wav.buffer;
+            delete[] pcm.buffer;
             return;
         }
 
@@ -898,7 +1052,7 @@ extern "C" {
         if (snd_pcm_hw_params_malloc(&params) < 0) {
             std::cerr << "Failed to allocate ALSA hw_params\n";
             snd_pcm_close(handle);
-            delete[] wav.buffer;
+            delete[] pcm.buffer;
             return;
         }
 
@@ -906,21 +1060,21 @@ extern "C" {
             std::cerr << "Failed to initialize ALSA hw_params\n";
             snd_pcm_hw_params_free(params);
             snd_pcm_close(handle);
-            delete[] wav.buffer;
+            delete[] pcm.buffer;
             return;
         }
 
         bool isFloat = false;
         int bitsPerSample = 16;
 
-        if (wav.bufferSize % (wav.channels * sizeof(int16_t)) == 0)
+        if (pcm.bufferSize % (pcm.channels * sizeof(int16_t)) == 0)
             bitsPerSample = 16;
-        else if (wav.bufferSize % (wav.channels * sizeof(int32_t)) == 0)
+        else if (pcm.bufferSize % (pcm.channels * sizeof(int32_t)) == 0)
             bitsPerSample = 32;
 
         snd_pcm_format_t format = get_alsa_format(bitsPerSample, isFloat);
         if (format == SND_PCM_FORMAT_UNKNOWN) {
-            std::cerr << "Unsupported WAV format for ALSA\n";
+            std::cerr << "Unsupported file format for ALSA\n";
             snd_pcm_hw_params_free(params);
             snd_pcm_close(handle);
             return;
@@ -929,8 +1083,8 @@ extern "C" {
         if (snd_pcm_hw_params_any(handle, params) < 0 ||
             snd_pcm_hw_params_set_access(handle, params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0 ||
             snd_pcm_hw_params_set_format(handle, params, format) < 0 ||
-            snd_pcm_hw_params_set_channels(handle, params, wav.channels) < 0 ||
-            snd_pcm_hw_params_set_rate(handle, params, wav.sampleRate, 0) < 0) {
+            snd_pcm_hw_params_set_channels(handle, params, pcm.channels) < 0 ||
+            snd_pcm_hw_params_set_rate(handle, params, pcm.sampleRate, 0) < 0) {
             std::cerr << "Cannot configure ALSA device\n";
             snd_pcm_hw_params_free(params);
             snd_pcm_close(handle);
@@ -940,13 +1094,13 @@ extern "C" {
         snd_pcm_hw_params(handle, params);
         snd_pcm_hw_params_free(params);
 
-        auto buffer = std::shared_ptr<char[]>(wav.buffer);
-        std::thread([handle, buffer, wav, format, low_latency]() {
+        auto buffer = std::shared_ptr<char[]>(pcm.buffer);
+        std::thread([handle, buffer, pcm, format, low_latency]() {
             const void* data = buffer.get();
-            size_t frameSize = wav.channels * ((format == SND_PCM_FORMAT_S16_LE) ? 2 : (format == SND_PCM_FORMAT_S32_LE || format == SND_PCM_FORMAT_FLOAT_LE) ? 4 : 0);
+            size_t frameSize = pcm.channels * ((format == SND_PCM_FORMAT_S16_LE) ? 2 : (format == SND_PCM_FORMAT_S32_LE || format == SND_PCM_FORMAT_FLOAT_LE) ? 4 : 0);
             if (frameSize == 0) return;
 
-            size_t totalFrames = wav.bufferSize / frameSize;
+            size_t totalFrames = pcm.bufferSize / frameSize;
             size_t framesWritten = 0;
             const size_t chunkFrames = low_latency ? 512 : 1024;
 
