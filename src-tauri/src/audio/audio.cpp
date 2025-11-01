@@ -1243,21 +1243,10 @@ extern "C" {
             size_t outFrames = 0;
 
             if (wfCapture->nSamplesPerSec != wfRender->nSamplesPerSec || captureChannels != renderChannels) {
-                float* resampled = linear_resample_interleaved(
-                    captureBuffer.data(),
-                    numFrames,
-                    captureChannels,
-                    wfCapture->nSamplesPerSec,
-                    wfRender->nSamplesPerSec,
-                    &outFrames
-                );
+                float* resampled = linear_resample_interleaved(captureBuffer.data(), numFrames, captureChannels, wfCapture->nSamplesPerSec,
+                    wfRender->nSamplesPerSec, &outFrames);
 
-                float* remapped = remap_channels_interleaved(
-                    resampled,
-                    outFrames,
-                    captureChannels,
-                    renderChannels
-                );
+                float* remapped = remap_channels_interleaved(resampled, outFrames, captureChannels, renderChannels);
 
                 delete[] resampled;
                 toRender = remapped;

@@ -6,6 +6,7 @@ use tauri::{
 mod files;
 mod funcs;
 mod audio;
+mod monitor;
 
 pub fn create_system_tray(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -90,7 +91,9 @@ pub fn create_window(hide_window: bool) {
             funcs::get_version,
             funcs::open_link,
             funcs::uninstall,
-            funcs::update
+            funcs::update,
+            funcs::get_performance,
+            funcs::clear_performance
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -107,6 +110,7 @@ pub fn create_window(hide_window: bool) {
 
 pub fn run() {
     audio::start();
+    monitor::start();
 
     let args: Vec<String> = std::env::args().collect();
     let hide_window: bool = args.contains(&"--background".to_string());

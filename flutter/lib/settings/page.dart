@@ -16,6 +16,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String outputDevice = "Please wait";
   double scale = 2147483647.0;
   bool lightMode = false;
+  bool monitor = false;
 
   @override
   void initState() {
@@ -30,6 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
       outputDevice = settings.outputDevice;
       scale = settings.scale;
       lightMode = settings.lightMode;
+      monitor = settings.monitor;
     });
 	}
 
@@ -38,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
       settings.outputDevice = outputDevice;
       settings.scale = scale;
       settings.lightMode = lightMode;
+      settings.monitor = monitor;
     });
 
     await settings.saveSettings(context);
@@ -129,6 +132,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       const SizedBox(height: 10),
 
+                      SwitchListTile(
+                        title: Text("Light mode:     ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        value: lightMode,
+                        onChanged: (value) {
+                          setState(() => lightMode = value);
+                        },
+                      ),
+
+                      const SizedBox(height: 10),
+
                       Row(
                         children: [
                           Text("Scale:    ", style: TextStyle(fontSize: 30, color: Colors.grey)),
@@ -150,10 +163,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Light mode:     ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
-                        value: lightMode,
+                        title: Text("Monitor Performance:    ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        value: monitor,
                         onChanged: (value) {
-                          setState(() => lightMode = value);
+                          setState(() => monitor = value);
                         },
                       ),
                     ],
@@ -194,12 +207,14 @@ class SettingsData extends ChangeNotifier {
   double scale = 2147483647.0;
   String version = "Please wait";
   bool lightMode = false;
+  bool monitor = false;
 
 	Future<void> loadSettings() async {
 		final settings = await invokeJS('get_settings');
 		
     scale = settings["scale"];
     lightMode = settings["light"];
+    monitor = settings["monitor"];
     if (settings["output"] != null && settings["output"].trim().isNotEmpty) {
       outputDevice = settings["output"];
     }
@@ -217,7 +232,7 @@ class SettingsData extends ChangeNotifier {
   }
 
 	Future<void> saveSettings(BuildContext context) async {
-		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode});
+		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor});
 
     final appState = Provider.of<AppStateNotifier>(context, listen: false);
     appState.reload();

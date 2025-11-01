@@ -13,7 +13,7 @@ unsafe extern "C" {
     fn get_outputs(len: *mut usize) -> *const *const c_char;
     fn get_inputs(len: *mut usize) -> *const *const c_char;
     fn get_apps(len: *mut usize) -> *const *const c_char;
-    fn play_sound(wav_file: *const c_char, device_name: *const c_char, low_latency: bool);
+    fn play_sound(file: *const c_char, device_name: *const c_char, low_latency: bool);
     fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
     fn app_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
     fn insert_volume(key: *const c_char, value: f32);

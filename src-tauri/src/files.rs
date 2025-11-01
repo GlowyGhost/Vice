@@ -29,7 +29,8 @@ pub(crate) struct Channel {
 pub(crate) struct Settings {
     pub(crate) output: String,
     pub(crate) scale: f32,
-    pub(crate) light: bool
+    pub(crate) light: bool,
+    pub(crate) monitor: bool
 }
 
 #[derive(Deserialize, Serialize, Default)]

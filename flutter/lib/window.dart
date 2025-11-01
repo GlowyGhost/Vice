@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'invoke_js.dart';
+import 'performance/page.dart';
 import 'settings/page.dart';
 import 'soundboard/page.dart';
 import 'channels/page.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-enum WindowPage { channels, soundboard, settings }
+enum WindowPage { channels, soundboard, settings, performance }
 
 class Window extends StatefulWidget {
   const Window({super.key});
@@ -91,6 +92,10 @@ class _WindowState extends State<Window> {
                     child: Text("Settings", style: TextStyle(fontSize: 32)),
                   ),
 
+                  const SizedBox(height: 10),
+
+                  performance(),
+
                   Spacer(),
 
                   Padding(
@@ -137,12 +142,34 @@ class _WindowState extends State<Window> {
               child: switch (_currentPage) {
                 WindowPage.channels => ChannelsManagerDisplay(),
                 WindowPage.soundboard => SoundboardManagerDisplay(),
-                WindowPage.settings => SettingsPage()
+                WindowPage.settings => SettingsPage(),
+                WindowPage.performance => PerformancePage()
               }
             )
           )
         ]
       )
     );
+  }
+
+  Widget performance() {
+    if (settings.monitor == true) {
+      return TextButton(
+        style: TextButton.styleFrom(
+          foregroundColor: _currentPage == WindowPage.performance
+            ? settings.lightMode
+              ? Color(0xFF000000)
+              : Color(0xFFFFFFFF)
+            : settings.lightMode
+              ? Color(0x2E2E2E2E)
+              : Color(0XFFB3B3B3),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+          alignment: Alignment.centerLeft,
+        ),
+        onPressed: () => setState(() => _currentPage = WindowPage.performance),
+        child: Text("Performance", style: TextStyle(fontSize: 32)),
+      );
+    }
+    return Center();
   }
 }

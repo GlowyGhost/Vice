@@ -45,21 +45,26 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
 }
 
 Map<String, dynamic> toMap(dynamic jsObject) {
-  if (jsObject is Map<String, dynamic>) {
-    return jsObject;
-  } else if (jsObject != null) {
-    final map = <String, dynamic>{};
+  if (jsObject == null) return {};
+
+  if (jsObject is Map) {
+    return Map<String, dynamic>.from(jsObject);
+  }
+
+  final map = <String, dynamic>{};
+  try {
     final keys = js_util.objectKeys(jsObject);
-    for (var i = 0; i < keys.length; i++) {
-      final key = keys[i]?.toString();
-      if (key != null) {
-        map[key] = js_util.getProperty(jsObject, key);
+    for (final key in keys) {
+      final keyStr = key?.toString();
+      if (keyStr != null) {
+        final value = js_util.getProperty(jsObject, keyStr);
+        map[keyStr] = value;
       }
     }
-    return map;
-  } else {
-    return {};
+  } catch (e) {
+    printText("Failed to convert JS object to map: $e");
   }
+  return map;
 }
 
 Future<void> printText(String? text) async {
@@ -119,16 +124,22 @@ class SFXsChannels {
 class Settings {
   final String? output;
   final double? scale;
+  final bool? light;
+  final bool? monitor;
 
   Settings({
     this.output,
-    this.scale
+    this.scale,
+    this.light,
+    this.monitor
   });
 
   factory Settings.fromMap(Map<String, dynamic> map) {
     return Settings(
       output: map["output"],
-      scale: map["scale"]
+      scale: map["scale"],
+      light: map["light"],
+      monitor: map["monitor"]
     );
   }
 }

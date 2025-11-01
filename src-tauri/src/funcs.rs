@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
+use crate::monitor;
 
 #[tauri::command]
 pub(crate) fn get_soundboard() -> Vec<SoundboardSFX> {
@@ -116,13 +117,24 @@ pub(crate) fn get_apps() -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn save_settings(output: String, scale: f32, light: bool) -> Result<(), String> {
+pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bool) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
     settings.output = output;
     settings.scale = scale;
     settings.light = light;
+    settings.monitor = monitor;
 
-    files::save_settings(settings).map(|_| audio::restart())
+    files::save_settings(settings).map(|_| {audio::restart(); monitor::change_bool(monitor)})
+}
+
+#[tauri::command]
+pub(crate) fn get_performance() -> String {
+    serde_json::to_string(&monitor::get_data()).unwrap_or_else(|_| "{}".to_string())
+}
+
+#[tauri::command]
+pub(crate) fn clear_performance() {
+    monitor::clear_data();
 }
 
 #[tauri::command]
