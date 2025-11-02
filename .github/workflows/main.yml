@@ -88,11 +88,11 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Linux dependencies for Tauri
+      - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+            sudo apt-get update
+            sudo apt-get install -y \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             libglib2.0-dev \
@@ -101,6 +101,8 @@ jobs:
             libpulse-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-good1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
             pkg-config
 
       - name: Download Flutter build
@@ -201,11 +203,11 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Linux dependencies for Tauri
+      - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+            sudo apt-get update
+            sudo apt-get install -y \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             libglib2.0-dev \
@@ -214,6 +216,8 @@ jobs:
             libpulse-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-good1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
             pkg-config
 
       - name: Download Flutter build
