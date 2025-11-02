@@ -602,7 +602,6 @@ extern "C" {
                 std::string device_name = get_device_name(targetDevice);
                 targetDevice->Release();
                 pMeterInfo->Release();
-                std::cout << std::to_string(peak) << "\n";
                 if (get == true) {
                     return string_to_cchar(std::to_string(peak)+"¬"+device_name);
                 } else {
