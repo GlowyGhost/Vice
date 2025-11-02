@@ -16,6 +16,8 @@ fn main() {
     {
         println!("cargo:rustc-link-lib=asound");
         println!("cargo:rustc-link-lib=pulse");
+        println!("cargo:rustc-link-lib=gstreamer-1.0");
+        println!("cargo:rustc-link-lib=gstreamer-app-1.0");
     }
 
     tauri_build::build()
