@@ -233,7 +233,7 @@ PCMResult loadPCM(const char* filename) {
 }
 
 const char* string_to_cchar(std::string string) {
-    return _strdup(string.c_str());
+    return strdup(string.c_str());
 }
 
 #ifdef _WIN32
@@ -953,6 +953,8 @@ extern "C" {
                 std::string monitorName;
                 bool gotSink = false;
 
+                std::pair<std::string*, bool*> userData(&monitorName, &gotSink);
+
                 pa_context_get_sink_info_by_name(context, "@DEFAULT_SINK@",
                     [](pa_context*, const pa_sink_info* info, int eol, void* userdata) {
                         if (eol > 0) return;
@@ -963,7 +965,7 @@ extern "C" {
                             *pair->second = true;
                         }
                     },
-                    &std::pair<std::string*, bool*>(&monitorName, &gotSink));
+                    &userData);
 
                 int tries = 100;
                 while (!gotSink && tries-- > 0)

@@ -127,7 +127,7 @@ class ChannelBar extends StatefulWidget {
 }
 
 class _ChannelBarState extends State<ChannelBar> {
-  late double sliderVolume;
+  double sliderVolume = 0;
   late double volume;
   String translatedName = "null";
   Timer? _timer;
@@ -136,7 +136,6 @@ class _ChannelBarState extends State<ChannelBar> {
   void initState() {
     super.initState();
     sliderVolume = widget.channel.volume / 2;
-    volume = sliderVolume;
 
     _initVolume();
   }
