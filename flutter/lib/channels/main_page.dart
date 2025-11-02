@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:vice/settings/page.dart';
+import 'dart:async';
 import '../invoke_js.dart';
 import 'edit_page.dart';
 import 'page.dart';
@@ -105,140 +107,183 @@ class _ChannelsMainState extends State<ChannelsMain> {
                       childAspectRatio: 1/0.5,
                     ),
                     itemBuilder: (context, index) {
-                      ChannelsClass? channel = Channels?[index];
-
-                      String? name = channel?.name;
-                      IconData icon = getIcon(channel!.icon);
-                      Color color = Color.fromARGB(255, channel.color.r, channel.color.g, channel.color.b);
-
-                      double volume = channel.volume/2;
-
-                      return StatefulBuilder(
-                        builder: (context, setState) {
-                          Color getColor(double v) {
-                            if (v <= 0.7) return Colors.green;
-                            if (v <= 0.9) return Colors.orange;
-                            return Colors.red;
-                          }
-
-                          Future<void> volumeCall() async {
-                            await invokeJS("set_volume", {"name": name, "volume": volume*2});
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final sliderHeight = constraints.maxHeight - 150;
-
-                                    return Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        RotatedBox(
-                                          quarterTurns: -1,
-                                          child: Container(
-                                            height: 10,
-                                            width: sliderHeight - 50,
-                                            decoration: BoxDecoration(
-                                              color: Color.fromARGB(255, 60, 60, 60),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                        ),
-
-                                        Align(
-                                          alignment: Alignment.bottomCenter,
-                                          child: Container(
-                                            height: (sliderHeight - 40) * volume,
-                                            width: 12,
-                                            margin: EdgeInsets.only(
-                                              bottom: (constraints.maxHeight - sliderHeight) / 2 + 25,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: getColor(volume),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                        ),
-
-                                        RotatedBox(
-                                          quarterTurns: -1,
-                                          child: SizedBox(
-                                            width: sliderHeight,
-                                            child: Slider(
-                                              value: volume,
-                                              thumbColor: Colors.white,
-                                              inactiveColor: Colors.transparent,
-                                              activeColor: Colors.transparent,
-                                              onChanged: (val) {
-                                                double v = val;
-                                                if (v < 0.55 && v > 0.45) {
-                                                  v = 0.5;
-                                                }
-
-                                                setState(() => volume = v);
-
-                                                volumeCall();
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-
-                                Align(
-                                  alignment: Alignment.topCenter,
-                                  child: CircleAvatar(
-                                    radius: 50,
-                                    backgroundColor: Colors.transparent,
-                                    child: Icon(icon, color: Colors.white, size: 50),
-                                  ),
-                                ),
-
-                                Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: Padding(
-                                    padding: EdgeInsets.all(6),
-                                    child: Text(
-                                      name!,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 48,
-                                      ),
-                                    ),
-                                  )
-                                ),
-
-                                Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: IconButton(
-                                      onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: name, icon: channel.icon, color: [channel.color.r, channel.color.g, channel.color.b], deviceApp: channel.device, deviceBool: channel.deviceOrApp, lowlatency: channel.lowlatency))},
-                                      icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
-                                    )
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
+                      return ChannelBar(channel: Channels![index]);
                     },
                   ),
                 )
               ),
             )
+    );
+  }
+}
+
+class ChannelBar extends StatefulWidget {
+  final ChannelsClass channel;
+
+  const ChannelBar({Key? key, required this.channel}) : super(key: key);
+
+  @override
+  State<ChannelBar> createState() => _ChannelBarState();
+}
+
+class _ChannelBarState extends State<ChannelBar> {
+  late double sliderVolume;
+  late double volume;
+  String translatedName = "null";
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    sliderVolume = widget.channel.volume / 2;
+    volume = sliderVolume;
+
+    _initVolume();
+  }
+
+  @override
+  void dispose() {
+    if (_timer != null) _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initVolume() async {
+    if (settings.peaks == true) {
+      await _getVolume();
+      _timer = Timer.periodic(const Duration(milliseconds: 100), (_) => _getVolume());
+    }
+  }
+
+  Future<void> _getVolume() async {
+    String result = await invokeJS("get_volume", {
+      "name": translatedName == "null" ? widget.channel.device : translatedName,
+      "get": translatedName == "null",
+      "device": widget.channel.deviceOrApp
+    });
+
+    setState(() {volume = double.parse(result.split("¬")[0]) * sliderVolume;});
+
+    if (translatedName == "null")
+      setState(() {translatedName = result.split("¬")[1];});
+
+  }
+
+  Future<void> _setVolume() async {
+    await invokeJS("set_volume", {"name": widget.channel.name, "volume": sliderVolume * 2});
+  }
+
+  Color getColor(double v) {
+    if (v <= 0.4) return Colors.green;
+    if (v <= 0.5) return Colors.orangeAccent;
+    if (v <= 0.6) return Colors.orange;
+    return Colors.red;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Color.fromARGB(255, widget.channel.color.r, widget.channel.color.g, widget.channel.color.b),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final sliderHeight = constraints.maxHeight - 150;
+
+              return Stack(
+              alignment: Alignment.center,
+              children: [
+                RotatedBox(
+                  quarterTurns: -1,
+                  child: Container(
+                    height: 10,
+                    width: sliderHeight - 50,
+                    decoration: BoxDecoration(
+                      color: Color.fromARGB(255, 60, 60, 60),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    height: (sliderHeight - 40) * volume,
+                    width: 12,
+                    margin: EdgeInsets.only(bottom: (constraints.maxHeight - sliderHeight) / 2 + 25),
+                    decoration: BoxDecoration(
+                      color: getColor(volume),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+
+                RotatedBox(
+                  quarterTurns: -1,
+                    child: SizedBox(
+                      width: sliderHeight,
+                      child: Slider(
+                        value: sliderVolume,
+                        thumbColor: Colors.white,
+                        inactiveColor: Colors.transparent,
+                        activeColor: Colors.transparent,
+                        onChanged: (val) {
+                          double v = val;
+                          if (v < 0.55 && v > 0.45) {
+                            v = 0.5;
+                          }
+                          setState(() => sliderVolume = v);
+                          _setVolume();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          Align(
+            alignment: Alignment.topCenter,
+            child: CircleAvatar(
+              radius: 50,
+              backgroundColor: Colors.transparent,
+              child: Icon(getIcon(widget.channel.icon), color: Colors.white, size: 50),
+            ),
+          ),
+
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: EdgeInsets.all(6),
+              child: Text(
+                widget.channel.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 48,
+                ),
+              ),
+            )
+          ),
+
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: IconButton(
+                onPressed: () => {ChannelsPageClass.setPage(ChannelsEdit(name: widget.channel.name, icon: widget.channel.icon, color: [widget.channel.color.r, widget.channel.color.g, widget.channel.color.b], deviceApp: widget.channel.device, deviceBool: widget.channel.deviceOrApp, lowlatency: widget.channel.lowlatency))},
+                icon: Icon(Icons.more_vert, size: 32, color: Colors.white)
+              )
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

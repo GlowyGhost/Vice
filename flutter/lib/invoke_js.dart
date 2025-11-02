@@ -126,12 +126,14 @@ class Settings {
   final double? scale;
   final bool? light;
   final bool? monitor;
+  final bool? peaks;
 
   Settings({
     this.output,
     this.scale,
     this.light,
-    this.monitor
+    this.monitor,
+    this.peaks
   });
 
   factory Settings.fromMap(Map<String, dynamic> map) {
@@ -139,7 +141,8 @@ class Settings {
       output: map["output"],
       scale: map["scale"],
       light: map["light"],
-      monitor: map["monitor"]
+      monitor: map["monitor"],
+      peaks: map["peaks"]
     );
   }
 }

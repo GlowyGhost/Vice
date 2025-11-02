@@ -28,6 +28,7 @@
 #include <mfreadwrite.h>
 #include <mferror.h>
 #include <mftransform.h>
+#include <endpointvolume.h>
 #else
 #include <alsa/asoundlib.h>
 #include <dirent.h>
@@ -142,7 +143,7 @@ PCMResult loadPCM(const char* filename) {
     reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, &pOutType);
 
     UINT32 sampleRate = MFGetAttributeUINT32(pOutType, MF_MT_AUDIO_SAMPLES_PER_SECOND, 44100);
-    UINT32 channels   = MFGetAttributeUINT32(pOutType, MF_MT_AUDIO_NUM_CHANNELS, 2);
+    UINT32 channels = MFGetAttributeUINT32(pOutType, MF_MT_AUDIO_NUM_CHANNELS, 2);
 
     std::vector<char> pcmData;
 
@@ -229,6 +230,10 @@ PCMResult loadPCM(const char* filename) {
     pcm.channels = channels;
     return { pcm, 0 };
     #endif
+}
+
+const char* string_to_cchar(std::string string) {
+    return _strdup(string.c_str());
 }
 
 #ifdef _WIN32
@@ -371,7 +376,28 @@ IMMDevice* find_device_by_name(EDataFlow flow, const char* name) {
     pDevices->Release();
     pEnum->Release();
     return result;
-};
+}
+
+std::string get_device_name(IMMDevice* pDevice)
+{
+    IPropertyStore* pProps = nullptr;
+    HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
+    if (FAILED(hr)) return "null";
+
+    PROPVARIANT varName;
+    PropVariantInit(&varName);
+
+    hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+    std::string name = "null";
+    if (SUCCEEDED(hr)) {
+        name = wideToUtf8(varName.pwszVal);
+    }
+
+    PropVariantClear(&varName);
+    pProps->Release();
+
+    return name;
+}
 #else
 struct AudioData {
     pa_stream* inputStream = nullptr;
@@ -547,6 +573,467 @@ extern "C" {
 
     void insert_volume(const char* key, float value) {
         volume[key] = value;
+    }
+
+    void free_cstr(const char* ptr) {
+        if (ptr) free((void*)ptr);
+    }
+
+    const char* get_volume(const char* name, bool get, bool device) {
+        #ifdef _WIN32
+        CoInitialize(nullptr);
+
+        if (device == true) {
+            IMMDevice* targetDevice = find_device_by_name(eCapture, name);
+            if (!targetDevice) {
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+
+            IAudioMeterInformation* pMeterInfo = nullptr;
+
+            if (FAILED(targetDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo))) {
+                std::cerr << "Failed to activate IAudioMeterInformation\n";
+                targetDevice->Release();
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+
+            float peak = 0.0f;
+            if (SUCCEEDED(pMeterInfo->GetPeakValue(&peak))) {
+                std::string device_name = get_device_name(targetDevice);
+                targetDevice->Release();
+                pMeterInfo->Release();
+                std::cout << std::to_string(peak) << "\n";
+                if (get == true) {
+                    return string_to_cchar(std::to_string(peak)+"¬"+device_name);
+                } else {
+                    return string_to_cchar(std::to_string(peak));
+                }
+            } else {
+                std::cerr << "GetPeakValue failed\n";
+                targetDevice->Release();
+                pMeterInfo->Release();
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+        } else {
+            IMMDevice* targetDevice = nullptr;
+            std::wstring trueName;
+
+            if (get == true) {
+                DWORD targetPid = 0;
+                PROCESSENTRY32W pe32{};
+                pe32.dwSize = sizeof(pe32);
+                HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                if (Process32FirstW(hSnap, &pe32)) {
+                    do {
+                        std::string exe = wideToUtf8(pe32.szExeFile);
+                        if (exe.size() > 4 && exe.substr(exe.size() - 4) == ".exe")
+                            exe = exe.substr(0, exe.size() - 4);
+                        if (_stricmp(exe.c_str(), name) == 0) {
+                            targetPid = pe32.th32ProcessID;
+                            break;
+                        }
+                    } while (Process32NextW(hSnap, &pe32));
+                }
+                CloseHandle(hSnap);
+                if (!targetPid) {
+                    std::cerr << "Process not found: " << name << "\n";
+                    CoUninitialize();
+                    return string_to_cchar("0¬null");
+                }
+
+                IMMDeviceEnumerator* pEnum = nullptr;
+                CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+
+                IMMDeviceCollection* devicesAll = nullptr;
+                pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devicesAll);
+                UINT deviceCount = 0; devicesAll->GetCount(&deviceCount);
+
+                for (UINT i = 0; i < deviceCount; ++i) {
+                    IMMDevice* dev = nullptr;
+                    if (FAILED(devicesAll->Item(i, &dev)) || !dev) continue;
+
+                    IAudioSessionManager2* mgr2 = nullptr;
+                    if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr2)) || !mgr2) {
+                        dev->Release();
+                        continue;
+                    }
+
+                    IAudioSessionEnumerator* sessionEnum = nullptr;
+                    if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) {
+                        mgr2->Release();
+                        dev->Release();
+                        continue;
+                    }
+
+                    int sessionCount = 0;
+                    sessionEnum->GetCount(&sessionCount);
+                    bool found = false;
+
+                    for (int s = 0; s < sessionCount; ++s) {
+                        IAudioSessionControl* ctrl = nullptr;
+                        if (FAILED(sessionEnum->GetSession(s, &ctrl)) || !ctrl) continue;
+
+                        IAudioSessionControl2* ctrl2 = nullptr;
+                        if (SUCCEEDED(ctrl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctrl2)) && ctrl2) {
+                            DWORD pid = 0;
+                            ctrl2->GetProcessId(&pid);
+                            ctrl2->Release();
+                            if (pid == targetPid) {
+                                targetDevice = dev;
+                                targetDevice->AddRef();
+                                found = true;
+                                break;
+                            }
+                        }
+                        ctrl->Release();
+                    }
+
+                    sessionEnum->Release();
+                    mgr2->Release();
+                    dev->Release();
+                    if (found) break;
+                }
+                devicesAll->Release();
+
+                if (!targetDevice) {
+                    std::cerr << "Failed to find audio session for PID\n";
+                    pEnum->Release();
+                    CoUninitialize();
+                    return string_to_cchar(get ? "0¬null" : "0");
+                }
+            } else {
+                targetDevice = find_device_by_name(eRender, name);
+                if (!targetDevice) {
+                    return string_to_cchar("0");
+                }
+            }
+
+            IAudioMeterInformation* pMeterInfo = nullptr;
+
+            if (FAILED(targetDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo))) {
+                std::cerr << "Failed to activate IAudioMeterInformation\n";
+                targetDevice->Release();
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+
+            float peak = 0.0f;
+            if (SUCCEEDED(pMeterInfo->GetPeakValue(&peak))) {
+                std::string device_name = get_device_name(targetDevice);
+                targetDevice->Release();
+                pMeterInfo->Release();
+                if (get == true) {
+                    return string_to_cchar(std::to_string(peak)+"¬"+device_name);
+                } else {
+                    return string_to_cchar(std::to_string(peak));
+                }
+            } else {
+                std::cerr << "GetPeakValue failed\n";
+                targetDevice->Release();
+                pMeterInfo->Release();
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+        }
+        #else
+        if (device == true) {
+            snd_pcm_t* handle = find_device_by_name(false, name);
+            if (!handle) {
+                std::cerr << "Failed to open ALSA device: " << (name ? name : "null") << "\n";
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+
+            snd_pcm_hw_params_t* params = nullptr;
+            snd_pcm_hw_params_malloc(&params);
+            snd_pcm_hw_params_any(handle, params);
+            snd_pcm_hw_params_set_access(handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+            snd_pcm_format_t fmt = SND_PCM_FORMAT_S16_LE;
+            snd_pcm_hw_params_set_format(handle, params, fmt);
+            unsigned int rate = 44100;
+            snd_pcm_hw_params_set_rate_near(handle, params, &rate, 0);
+            int channels = 2;
+            snd_pcm_hw_params_set_channels(handle, params, channels);
+            snd_pcm_uframes_t frames = 1024;
+            snd_pcm_hw_params_set_period_size_near(handle, params, &frames, 0);
+
+            int err = snd_pcm_hw_params(handle, params);
+            snd_pcm_hw_params_free(params);
+            if (err < 0) {
+                std::cerr << "Failed to set ALSA hw params: " << snd_strerror(err) << "\n";
+                snd_pcm_close(handle);
+                return string_to_cchar(get ? "0¬null" : "0");
+            }
+
+            int16_t* buffer = new int16_t[frames * channels];
+            snd_pcm_prepare(handle);
+            snd_pcm_sframes_t read_frames = snd_pcm_readi(handle, buffer, frames);
+            float peak = 0.0f;
+            if (read_frames > 0) {
+                size_t items = (size_t)read_frames * channels;
+                for (size_t i = 0; i < items; ++i) {
+                    float v = std::abs(buffer[i]) / 32768.0f;
+                    if (v > peak) peak = v;
+                }
+            } else {
+                snd_pcm_recover(handle, (int)read_frames, 1);
+            }
+
+            delete [] buffer;
+            snd_pcm_close(handle);
+
+            std::string device_name = name ? std::string(name) : std::string("null");
+
+            if (get == true) {
+                return string_to_cchar(std::to_string(peak) + "¬" + device_name);
+            } else {
+                return string_to_cchar(std::to_string(peak));
+            }
+        } else {
+            if (get == true) {
+                pa_mainloop* mainloop = pa_mainloop_new();
+                pa_context* context = pa_context_new(pa_mainloop_get_api(mainloop), "get_volume_loopback");
+
+                pa_context_connect(context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+
+                pa_context_state_t state;
+                do {
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+                    state = pa_context_get_state(context);
+                } while (state != PA_CONTEXT_READY && state != PA_CONTEXT_FAILED && state != PA_CONTEXT_TERMINATED);
+
+                if (state != PA_CONTEXT_READY) {
+                    std::cerr << "Failed to connect to PulseAudio\n";
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                struct UserData {
+                    const char* targetApp;
+                    uint32_t sinkInputIndex = PA_INVALID_INDEX;
+                    uint32_t sinkIndex = PA_INVALID_INDEX;
+                    bool found = false;
+                } userdata{ name };
+
+                auto sink_input_cb = [](pa_context*, const pa_sink_input_info* i, int eol, void* userdata) {
+                    if (eol > 0) return;
+                    auto* ud = reinterpret_cast<UserData*>(userdata);
+                    if (!i || ud->found) return;
+                    const char* proc = pa_proplist_gets(i->proplist, PA_PROP_APPLICATION_PROCESS_BINARY);
+                    const char* appname = pa_proplist_gets(i->proplist, PA_PROP_APPLICATION_NAME);
+                    if ((proc && strcmp(proc, ud->targetApp) == 0) ||
+                        (appname && strcmp(appname, ud->targetApp) == 0)) {
+                        ud->sinkInputIndex = i->index;
+                        ud->sinkIndex = i->sink;
+                        ud->found = true;
+                    }
+                };
+
+                pa_context_get_sink_input_info_list(context, sink_input_cb, &userdata);
+                int tries = 100;
+                while (!userdata.found && tries-- > 0)
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                if (!userdata.found) {
+                    std::cerr << "Target app not found: " << name << "\n";
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                std::string monitorName = "";
+                if (userdata.sinkIndex != PA_INVALID_INDEX) {
+                    struct SinkInfoData {
+                        std::string monitor;
+                        bool done = false;
+                    } sid;
+
+                    pa_context_get_sink_info_by_index(context, userdata.sinkIndex,
+                        [](pa_context*, const pa_sink_info* info, int eol, void* userdata) {
+                            if (eol > 0) return;
+                            auto* d = reinterpret_cast<SinkInfoData*>(userdata);
+                            if (info && info->monitor_source)
+                                d->monitor = info->monitor_source;
+                            d->done = true;
+                        }, &sid);
+
+                    int w = 100;
+                    while (!sid.done && w-- > 0)
+                        pa_mainloop_iterate(mainloop, 1, nullptr);
+                    if (!sid.monitor.empty())
+                        monitorName = sid.monitor;
+                }
+
+                if (monitorName.empty())
+                    monitorName = "@DEFAULT_MONITOR@";
+
+                pa_sample_spec spec{};
+                spec.format = PA_SAMPLE_FLOAT32LE;
+                spec.rate = 44100;
+                spec.channels = 2;
+
+                pa_stream* stream = pa_stream_new(context, "loopback_peak", &spec, nullptr);
+                if (!stream) {
+                    std::cerr << "Failed to create stream\n";
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                std::vector<float> samples;
+                bool done = false;
+
+                pa_stream_set_read_callback(stream,
+                    [](pa_stream* s, size_t nbytes, void* userdata) {
+                        auto* buf = reinterpret_cast<std::vector<float>*>(userdata);
+                        const void* data;
+                        if (pa_stream_peek(s, &data, &nbytes) < 0 || !data || nbytes == 0)
+                            return;
+                        size_t frames = nbytes / sizeof(float);
+                        buf->resize(frames);
+                        memcpy(buf->data(), data, nbytes);
+                        pa_stream_drop(s);
+                    },
+                    &samples);
+
+                if (pa_stream_connect_record(stream, monitorName.c_str(), nullptr, PA_STREAM_ADJUST_LATENCY) < 0) {
+                    std::cerr << "Failed to connect to monitor: " << monitorName << "\n";
+                    pa_stream_unref(stream);
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                while (pa_stream_get_state(stream) != PA_STREAM_READY)
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                auto start = std::chrono::steady_clock::now();
+                while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(5))
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                float peak = 0.0f;
+                if (!samples.empty()) {
+                    for (float f : samples)
+                        peak = std::max(peak, std::abs(f));
+                }
+
+                pa_stream_disconnect(stream);
+                pa_stream_unref(stream);
+                pa_context_disconnect(context);
+                pa_context_unref(context);
+                pa_mainloop_free(mainloop);
+
+                if (get) {
+                    return string_to_cchar(std::to_string(peak) + "¬" + monitorName);
+                } else {
+                    return string_to_cchar(std::to_string(peak));
+                }
+
+            } else {
+                pa_mainloop* mainloop = pa_mainloop_new();
+                pa_context* context = pa_context_new(pa_mainloop_get_api(mainloop), "output_device_peak");
+
+                pa_context_connect(context, nullptr, PA_CONTEXT_NOFLAGS, nullptr);
+
+                pa_context_state_t state;
+                do {
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+                    state = pa_context_get_state(context);
+                } while (state != PA_CONTEXT_READY && state != PA_CONTEXT_FAILED && state != PA_CONTEXT_TERMINATED);
+
+                if (state != PA_CONTEXT_READY) {
+                    std::cerr << "Failed to connect to PulseAudio\n";
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                std::string monitorName;
+                bool gotSink = false;
+
+                pa_context_get_sink_info_by_name(context, "@DEFAULT_SINK@",
+                    [](pa_context*, const pa_sink_info* info, int eol, void* userdata) {
+                        if (eol > 0) return;
+                        if (!info) return;
+                        auto* pair = reinterpret_cast<std::pair<std::string*, bool*>*>(userdata);
+                        if (info->monitor_source) {
+                            *pair->first = info->monitor_source;
+                            *pair->second = true;
+                        }
+                    },
+                    &std::pair<std::string*, bool*>(&monitorName, &gotSink));
+
+                int tries = 100;
+                while (!gotSink && tries-- > 0)
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                if (monitorName.empty())
+                    monitorName = "@DEFAULT_MONITOR@";
+
+                pa_sample_spec spec{};
+                spec.format = PA_SAMPLE_FLOAT32LE;
+                spec.rate = 44100;
+                spec.channels = 2;
+
+                pa_stream* stream = pa_stream_new(context, "output_peak", &spec, nullptr);
+                if (!stream) {
+                    std::cerr << "Failed to create stream\n";
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                std::vector<float> samples;
+
+                pa_stream_set_read_callback(stream,
+                    [](pa_stream* s, size_t nbytes, void* userdata) {
+                        auto* buf = reinterpret_cast<std::vector<float>*>(userdata);
+                        const void* data;
+                        if (pa_stream_peek(s, &data, &nbytes) < 0 || !data || nbytes == 0)
+                            return;
+                        size_t frames = nbytes / sizeof(float);
+                        buf->resize(frames);
+                        memcpy(buf->data(), data, nbytes);
+                        pa_stream_drop(s);
+                    },
+                    &samples);
+
+                if (pa_stream_connect_record(stream, monitorName.c_str(), nullptr, PA_STREAM_ADJUST_LATENCY) < 0) {
+                    std::cerr << "Failed to connect to monitor: " << monitorName << "\n";
+                    pa_stream_unref(stream);
+                    pa_context_disconnect(context);
+                    pa_context_unref(context);
+                    pa_mainloop_free(mainloop);
+                    return string_to_cchar("0¬null");
+                }
+
+                while (pa_stream_get_state(stream) != PA_STREAM_READY)
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                auto start = std::chrono::steady_clock::now();
+                while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(5))
+                    pa_mainloop_iterate(mainloop, 1, nullptr);
+
+                float peak = 0.0f;
+                if (!samples.empty()) {
+                    for (float f : samples)
+                        peak = std::max(peak, std::abs(f));
+                }
+
+                pa_stream_disconnect(stream);
+                pa_stream_unref(stream);
+                pa_context_disconnect(context);
+                pa_context_unref(context);
+                pa_mainloop_free(mainloop);
+
+                return string_to_cchar(std::to_string(peak) + "¬" + monitorName);
+            }
+        }
+        #endif
     }
     #pragma endregion
     #pragma region Get Ouputs
@@ -1534,11 +2021,16 @@ extern "C" {
 
             IAudioSessionManager2* mgr2 = nullptr;
             if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)&mgr2)) || !mgr2) {
-                dev->Release(); continue;
+                dev->Release();
+                continue;
             }
 
             IAudioSessionEnumerator* sessionEnum = nullptr;
-            if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) { mgr2->Release(); dev->Release(); continue; }
+            if (FAILED(mgr2->GetSessionEnumerator(&sessionEnum)) || !sessionEnum) {
+                mgr2->Release();
+                dev->Release();
+                continue;
+            }
 
             int sessionCount = 0;
             sessionEnum->GetCount(&sessionCount);
@@ -1550,22 +2042,41 @@ extern "C" {
 
                 IAudioSessionControl2* ctrl2 = nullptr;
                 if (SUCCEEDED(ctrl->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&ctrl2)) && ctrl2) {
-                    DWORD pid = 0; ctrl2->GetProcessId(&pid); ctrl2->Release();
-                    if (pid == targetPid) { captureDevice = dev; captureDevice->AddRef(); found = true; break; }
+                    DWORD pid = 0;
+                    ctrl2->GetProcessId(&pid);
+                    ctrl2->Release();
+                    if (pid == targetPid) {
+                        captureDevice = dev;
+                        captureDevice->AddRef();
+                        found = true;
+                        break;
+                    }
                 }
                 ctrl->Release();
             }
 
-            sessionEnum->Release(); mgr2->Release(); dev->Release();
+            sessionEnum->Release();
+            mgr2->Release();
+            dev->Release();
             if (found) break;
         }
         devicesAll->Release();
 
-        if (!captureDevice) { std::cerr << "Failed to find audio session for PID\n"; renderDevice->Release(); pEnum->Release(); CoUninitialize(); return; }
+        if (!captureDevice) {
+            std::cerr << "Failed to find audio session for PID\n";
+            renderDevice->Release();
+            pEnum->Release();
+            CoUninitialize();
+            return;
+        }
 
         if (captureDevice == renderDevice) {
             std::cerr << "Capture and render device are the same. Feedback possible!\n";
-            captureDevice->Release(); renderDevice->Release(); pEnum->Release(); CoUninitialize(); return;
+            captureDevice->Release();
+            renderDevice->Release();
+            pEnum->Release();
+            CoUninitialize();
+            return;
         }
 
         IAudioClient2* captureClient = nullptr;

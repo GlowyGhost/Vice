@@ -30,7 +30,8 @@ pub(crate) struct Settings {
     pub(crate) output: String,
     pub(crate) scale: f32,
     pub(crate) light: bool,
-    pub(crate) monitor: bool
+    pub(crate) monitor: bool,
+    pub(crate) peaks: bool
 }
 
 #[derive(Deserialize, Serialize, Default)]

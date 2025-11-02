@@ -93,7 +93,8 @@ pub fn create_window(hide_window: bool) {
             funcs::uninstall,
             funcs::update,
             funcs::get_performance,
-            funcs::clear_performance
+            funcs::clear_performance,
+            funcs::get_volume
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

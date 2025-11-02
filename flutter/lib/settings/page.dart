@@ -17,6 +17,7 @@ class _SettingsPageState extends State<SettingsPage> {
   double scale = 2147483647.0;
   bool lightMode = false;
   bool monitor = false;
+  bool peaks = true;
 
   @override
   void initState() {
@@ -32,6 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
       scale = settings.scale;
       lightMode = settings.lightMode;
       monitor = settings.monitor;
+      peaks = settings.peaks;
     });
 	}
 
@@ -41,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
       settings.scale = scale;
       settings.lightMode = lightMode;
       settings.monitor = monitor;
+      settings.peaks = peaks;
     });
 
     await settings.saveSettings(context);
@@ -110,7 +113,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Row(
                         children: [
-                          Text("Output:    ", style: TextStyle(fontSize: 30, color: Colors.grey)),
+                          Text("Output:    ", style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                           Expanded(
                             child: TextButton(
                               onPressed: () {
@@ -144,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       Row(
                         children: [
-                          Text("Scale:    ", style: TextStyle(fontSize: 30, color: Colors.grey)),
+                          Text("Scale:    ", style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                           Expanded(
                             child: Slider(
                               value: scale,
@@ -167,6 +170,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: monitor,
                         onChanged: (value) {
                           setState(() => monitor = value);
+                        },
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      SwitchListTile(
+                        title: Text("Display channel peaks:    ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        value: peaks,
+                        onChanged: (value) {
+                          setState(() => peaks = value);
                         },
                       ),
                     ],
@@ -208,6 +221,7 @@ class SettingsData extends ChangeNotifier {
   String version = "Please wait";
   bool lightMode = false;
   bool monitor = false;
+  bool peaks = true;
 
 	Future<void> loadSettings() async {
 		final settings = await invokeJS('get_settings');
@@ -215,6 +229,7 @@ class SettingsData extends ChangeNotifier {
     scale = settings["scale"];
     lightMode = settings["light"];
     monitor = settings["monitor"];
+    peaks = settings["peaks"];
     if (settings["output"] != null && settings["output"].trim().isNotEmpty) {
       outputDevice = settings["output"];
     }
@@ -232,7 +247,7 @@ class SettingsData extends ChangeNotifier {
   }
 
 	Future<void> saveSettings(BuildContext context) async {
-		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor});
+		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor, "peaks": peaks});
 
     final appState = Provider.of<AppStateNotifier>(context, listen: false);
     appState.reload();

@@ -117,12 +117,13 @@ pub(crate) fn get_apps() -> Vec<String> {
 }
 
 #[tauri::command]
-pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bool) -> Result<(), String> {
+pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bool, peaks: bool) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
     settings.output = output;
     settings.scale = scale;
     settings.light = light;
     settings.monitor = monitor;
+    settings.peaks = peaks;
 
     files::save_settings(settings).map(|_| {audio::restart(); monitor::change_bool(monitor)})
 }
@@ -181,13 +182,18 @@ pub(crate) fn play_sound(sound: String, low: bool) {
 }
 
 #[tauri::command]
+pub(crate) fn get_volume(name: String, get: bool, device: bool) -> String {
+    audio::get_volume_parsed(name, get, device)
+}
+
+#[tauri::command]
 pub(crate) fn flutter_print(text: &str) {
     println!("{}", text)
 }
 
 #[tauri::command]
 pub(crate) fn uninstall() -> Result<String, String> {
-    let res = MessageDialog::new()
+    let res: MessageDialogResult = MessageDialog::new()
         .set_title("Uninstall")
         .set_description("Are you sure you want to uninstall Luauncher?")
         .set_buttons(rfd::MessageButtons::YesNo)
