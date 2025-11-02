@@ -1,8 +1,32 @@
 fn main() {
-    cc::Build::new()
+    let mut binding = cc::Build::new();
+    #[cfg(target_os = "linux")]
+    let mut audio = binding
         .cpp(true)
-        .file("src/audio/audio.cpp")
-        .compile("audio");
+        .file("src/audio/audio.cpp");
+
+    #[cfg(target_os = "windows")]
+    let audio = binding
+        .cpp(true)
+        .file("src/audio/audio.cpp");
+
+    #[cfg(target_os = "linux")]
+    {
+        let gst_flags = pkg_config::Config::new()
+            .probe("gstreamer-1.0")
+            .expect("Failed to find GStreamer");
+        let gst_app_flags = pkg_config::Config::new()
+            .probe("gstreamer-app-1.0")
+            .expect("Failed to find GStreamer App");
+        for path in gst_flags.include_paths.iter() {
+            audio.include(path);
+        }
+        for path in gst_app_flags.include_paths.iter() {
+            audio.include(path);
+        }
+    }
+
+    audio.compile("audio");
 
     #[cfg(target_os = "windows")]
     {

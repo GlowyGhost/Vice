@@ -4776,6 +4776,7 @@ dependencies = [
  "cc",
  "once_cell",
  "open",
+ "pkg-config",
  "reqwest",
  "rfd",
  "serde",

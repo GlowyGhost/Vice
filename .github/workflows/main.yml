@@ -100,7 +100,8 @@ jobs:
             libasound2-dev \
             libpulse-dev \
             libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev
+            libgstreamer-plugins-base1.0-dev \
+            pkg-config
 
       - name: Download Flutter build
         uses: actions/download-artifact@v4
@@ -212,7 +213,8 @@ jobs:
             libasound2-dev \
             libpulse-dev \
             libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev
+            libgstreamer-plugins-base1.0-dev \
+            pkg-config
 
       - name: Download Flutter build
         uses: actions/download-artifact@v4
