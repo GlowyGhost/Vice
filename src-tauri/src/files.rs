@@ -3,6 +3,7 @@ use std::{
     path::PathBuf, process::Command
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
@@ -25,7 +26,7 @@ pub(crate) struct Channel {
     pub(crate) volume: f32
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Clone, Default)]
+#[derive(Deserialize, Serialize, PartialEq, Clone)]
 pub(crate) struct Settings {
     pub(crate) output: String,
     pub(crate) scale: f32,
@@ -34,11 +35,23 @@ pub(crate) struct Settings {
     pub(crate) peaks: bool
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct File {
     pub(crate) soundboard: Vec<SoundboardSFX>,
     pub(crate) channels: Vec<Channel>,
     pub(crate) settings: Settings,
+}
+
+impl Default for File {
+    fn default() -> Self {
+        File { soundboard: vec![], channels: vec![], settings: Settings::default() }
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { output: "".to_string(), scale: 1.0, light: false, monitor: true, peaks: true }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -49,12 +62,17 @@ const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater");
 
 fn app_base() -> PathBuf {
     #[cfg(target_os = "windows")]
-    let base: String = env::var("APPDATA").unwrap_or("Error occured when getting App Base".to_string());
+    let base = env::var("APPDATA");
     #[cfg(target_os = "linux")]
-    let base: String = env::var("XDG_DATA_HOME")
-        .unwrap_or_else(|_| format!("{}/.local/share", env::var("HOME").unwrap_or_else(|_| "/tmp".into())));
-    
-    PathBuf::from(base).join("Vice")
+    let base = env::var("XDG_DATA_HOME");
+
+    match base {
+        Ok(s) => return PathBuf::from(s).join("Vice"),
+        Err(e) => {
+            eprintln!("Error occured when getting App Base: {:#?}", e);
+            return env::temp_dir();
+        }
+    }
 }
 
 fn settings_json() -> PathBuf {
@@ -89,6 +107,168 @@ pub(crate) fn create_files() {
     }
 }
 
+pub(crate) fn fix_settings(broken: Value) -> Settings {
+    let mut settings: Settings = Settings::default();
+
+    if let Some(output) = broken.get("output").and_then(|v| v.as_str()) {
+        settings.output = output.to_string();
+    }
+
+    if let Some(scale) = broken.get("scale").and_then(|v| v.as_f64()) {
+        if scale.is_finite() && scale >= 0.1 && scale <= 2.0 {
+            settings.scale = scale as f32;
+        } else {
+            settings.scale = 1.0;
+        }
+    }
+
+    if let Some(light) = broken.get("light").and_then(|v| v.as_bool()) {
+        settings.light = light;
+    }
+
+    if let Some(monitor) = broken.get("monitor").and_then(|v| v.as_bool()) {
+        settings.monitor = monitor;
+    }
+
+    if let Some(peaks) = broken.get("peaks").and_then(|v| v.as_bool()) {
+        settings.peaks = peaks;
+    }
+
+    settings
+}
+
+pub(crate) fn fix_soundeffect(broken: Value) -> SoundboardSFX {
+    let mut sfx: SoundboardSFX = SoundboardSFX::default();
+
+    if let Some(name) = broken.get("name").and_then(|v| v.as_str()) {
+        sfx.name = name.to_string();
+    }
+
+    if let Some(icon) = broken.get("icon").and_then(|v| v.as_str()) {
+        sfx.icon = icon.to_string();
+    }
+
+    if let Some(broken_color) = broken.get("color").and_then(|v| v.as_array()) {
+        let mut color: Vec<u8> = vec![];
+        for v in broken_color {
+            let int: i64 = v.as_i64().map_or(-1, |i: i64| i);
+            if int > 255 {
+                color.push(255 as u8);
+            } else if int < 0 {
+                color.push(0 as u8);
+            } else {
+                color.push(int as u8);
+            }
+        }
+
+        if color.len() > 3 {
+            color.truncate(3);
+        } else if color.len() < 3 {
+            color.resize(3, 0); 
+        }
+
+        let mut color_array: [u8; 3] = [0, 0, 0];
+        for (i, &val) in color.iter().enumerate() {
+            color_array[i] = val;
+        }
+
+        sfx.color = color_array;
+    }
+
+    if let Some(sound) = broken.get("sound").and_then(|v| v.as_str()) {
+        sfx.sound = sound.to_string();
+    }
+
+    if let Some(lowlatency) = broken.get("lowlatency").and_then(|v| v.as_bool()) {
+        sfx.lowlatency = lowlatency;
+    }
+
+    sfx
+}
+
+pub(crate) fn fix_channel(broken: Value) -> Channel {
+    let mut channel: Channel = Channel::default();
+
+    if let Some(name) = broken.get("name").and_then(|v| v.as_str()) {
+        channel.name = name.to_string();
+    }
+
+    if let Some(icon) = broken.get("icon").and_then(|v| v.as_str()) {
+        channel.icon = icon.to_string();
+    }
+
+    if let Some(broken_color) = broken.get("color").and_then(|v| v.as_array()) {
+        let mut color: Vec<u8> = vec![];
+        for v in broken_color {
+            let int: i64 = v.as_i64().map_or(-1, |i: i64| i);
+            if int > 255 {
+                color.push(255 as u8);
+            } else if int < 0 {
+                color.push(0 as u8);
+            } else {
+                color.push(int as u8);
+            }
+        }
+
+        if color.len() > 3 {
+            color.truncate(3);
+        } else if color.len() < 3 {
+            color.resize(3, 0); 
+        }
+
+        let mut color_array: [u8; 3] = [0, 0, 0];
+        for (i, &val) in color.iter().enumerate() {
+            color_array[i] = val;
+        }
+
+        channel.color = color_array;
+    }
+
+    if let Some(device) = broken.get("device").and_then(|v| v.as_str()) {
+        channel.device = device.to_string();
+    }
+
+    if let Some(deviceorapp) = broken.get("deviceorapp").and_then(|v| v.as_bool()) {
+        channel.deviceorapp = deviceorapp;
+    }
+
+    if let Some(lowlatency) = broken.get("lowlatency").and_then(|v| v.as_bool()) {
+        channel.lowlatency = lowlatency;
+    }
+
+    if let Some(volume) = broken.get("volume").and_then(|v| v.as_f64()) {
+        channel.volume = volume as f32;
+    }
+
+    channel
+}
+
+pub(crate) fn fix_file(broken: Value) -> File {
+    let mut file: File = File::default();
+
+    if let Some(settings_val) = broken.get("settings") {
+        file.settings = fix_settings(settings_val.clone());
+    }
+
+    if let Some(sfxs) = broken.get("soundboard").and_then(|v| v.as_array()) {
+        let mut soundeffects: Vec<SoundboardSFX> = vec![];
+        for sfx in sfxs.iter() {
+            soundeffects.push(fix_soundeffect(sfx.clone()));
+        }
+        file.soundboard = soundeffects;
+    }
+
+    if let Some(channels) = broken.get("channels").and_then(|v| v.as_array()) {
+        let mut cs: Vec<Channel> = vec![];
+        for channel in channels.iter() {
+            cs.push(fix_channel(channel.clone()));
+        }
+        file.channels = cs;
+    }
+
+    file
+}
+
 pub(crate) fn get_file() -> File {
     let path: PathBuf = settings_json();
 
@@ -109,7 +289,21 @@ pub(crate) fn get_file() -> File {
             Ok(file) => return file,
             Err(e) => {
                 eprintln!("Failed to parse settings file: {}", e);
-                return File::default();
+                println!("Attempting to fix...");
+                match serde_json::from_str::<Value>(&data) {
+                    Ok(value) => {
+                        let fixed: File = fix_file(value);
+                        println!("Successfully fixed!");
+                        let _ = save_file(&fixed);
+                        return fixed;
+                    }
+                    Err(e) => {
+                        let fixed: File = File::default();
+                        println!("Failed to fix the settings file: {}", e);
+                        let _ = save_file(&fixed);
+                        return fixed;
+                    }
+                }
             }
         }
     }
