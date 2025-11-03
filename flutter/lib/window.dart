@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:vice/main.dart';
 import 'invoke_js.dart';
 import 'performance/page.dart';
 import 'settings/page.dart';
@@ -20,6 +22,8 @@ class _WindowState extends State<Window> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<AppStateNotifier>();
+    
     return Scaffold(
       body: Column(
         children: [

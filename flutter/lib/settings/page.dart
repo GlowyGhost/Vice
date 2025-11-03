@@ -113,7 +113,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Row(
                         children: [
-                          Text("Output:    ", style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                          Text("   Output:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                           Expanded(
                             child: TextButton(
                               onPressed: () {
@@ -147,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       Row(
                         children: [
-                          Text("Scale:    ", style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                          Text("   Scale:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                           Expanded(
                             child: Slider(
                               value: scale,
@@ -166,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Monitor Performance:    ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        title: Text("Monitor Performance:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                         value: monitor,
                         onChanged: (value) {
                           setState(() => monitor = value);
@@ -176,7 +176,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Display channel peaks:    ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        title: Text("Display channel peaks:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
                         value: peaks,
                         onChanged: (value) {
                           setState(() => peaks = value);
