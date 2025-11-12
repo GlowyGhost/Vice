@@ -42,5 +42,8 @@ fn main() {
         println!("cargo:rustc-link-lib=pulse");
     }
 
-    tauri_build::build()
+    winres::WindowsResource::new()
+        .set_icon("icons/icon.ico")
+        .compile()
+        .unwrap();
 }

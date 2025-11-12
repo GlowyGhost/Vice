@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'invoke_js.dart';
@@ -32,11 +34,11 @@ class App extends StatelessWidget {
           title: "Vice",
           theme: ThemeData(
             scaffoldBackgroundColor: settings.lightMode
-                ? const Color(0xFFCCCCCC)
-                : const Color(0xFF262626),
+              ? const Color(0xFFCCCCCC)
+              : const Color(0xFF262626),
             primaryColor: settings.lightMode
-                ? const Color(0xFFCCCCCC)
-                : const Color(0xFF262626),
+              ? const Color(0xFFCCCCCC)
+              : const Color(0xFF262626),
           ),
           home: const ScaledWindow(),
         );
@@ -52,7 +54,7 @@ class ScaledWindow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppStateNotifier>(
       builder: (context, appState, _) {
-        final scale = settings.scale;
+        final scale = clampDouble(settings.scale, 0.1, 2.0);
 
         return LayoutBuilder(
           builder: (context, constraints) {

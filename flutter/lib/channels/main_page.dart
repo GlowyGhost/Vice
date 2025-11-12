@@ -45,16 +45,6 @@ class _ChannelsMainState extends State<ChannelsMain> {
   }
 
   Future<void> _init() async {
-    if (mounted && isTauriAvailable == false) {
-      printText("Can't connect to Backend.");
-      snackBar("Unable to connect with backend.");
-      return;
-    }
-    
-    _loadChannels();
-  }
-
-  Future<void> _loadChannels() async {
     setState(() => _loading = true);
 
     final channels = await invokeJS("get_channels");
@@ -69,12 +59,6 @@ class _ChannelsMainState extends State<ChannelsMain> {
       Channels = convertedChannels;
       _loading = false;
     });
-  }
-
-  void snackBar(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-			SnackBar(content: Text(text)),
-		);
   }
 
   @override

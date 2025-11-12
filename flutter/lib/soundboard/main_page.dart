@@ -41,16 +41,6 @@ class _SoundboardMainState extends State<SoundboardMain> {
   }
 
   Future<void> _init() async {
-    if (mounted && isTauriAvailable == false) {
-      printText("Can't connect to Backend.");
-      snackBar("Unable to connect with backend.");
-      return;
-    }
-
-    _loadSfx();
-  }
-
-  Future<void> _loadSfx() async {
     setState(() => _loading = true);
 
     final sfxs = await invokeJS("get_soundboard");
@@ -65,12 +55,6 @@ class _SoundboardMainState extends State<SoundboardMain> {
       SFXs = covertedSFXS;
       _loading = false;
     });
-  }
-
-  void snackBar(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-			SnackBar(content: Text(text)),
-		);
   }
 
   @override

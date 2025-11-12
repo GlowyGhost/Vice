@@ -1,46 +1,62 @@
-import "package:js/js.dart";
-import "dart:js_util" as js_util;
-import "dart:js" as js;
+import "dart:js_util";
+import 'dart:html' as html;
+import 'dart:convert';
 import "dart:async";
 
-@JS("window.__TAURI__.core.invoke")
-external dynamic _invoke(String cmd, [dynamic args]);
-
 Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
+  final body = jsonEncode({'cmd': cmd, 'args': args ?? {}});
   try {
-    final jsArgs = args != null ? js_util.jsify(args) : null;
-    final promise = _invoke(cmd, jsArgs);
-    final result = await js_util.promiseToFuture(promise);
+    final resp = await html.HttpRequest.request(
+      '/ipc',
+      method: 'POST',
+      sendData: body,
+      requestHeaders: {'Content-Type': 'application/json'},
+    ).timeout(Duration(seconds: 10));
 
-    if (result is String || result is bool) {
-      return result;
-    } else if (result == null) {
-      return null;
-    } else if (result is List) {
-      return result.map((e) {
-        if (e is String) {
-          return e;
-        }
+    if (resp.status == 200) {
+      final text = resp.responseText ?? 'null';
+      final decoded = jsonDecode(text);
+      if (decoded == null) {
+        return null;
+      }
+      final result = decoded['result'];
+      
+      if (result is String || result is bool) {
+        return result;
+      } else if (result == null) {
+        return null;
+      } else if (result is List) {
+        return result.map((e) {
+          if (e is String) {
+            return e;
+          }
 
-        final map = toMap(e);
+          final map = toMap(e);
 
-        if (map.containsKey("name") ||
-          map.containsKey("icon") ||
-          map.containsKey("sound") ||
-          map.containsKey("device") ||
-          map.containsKey("color") ||
-          map.containsKey("lowlatency")) {
-          return SFXsChannels.fromMap(map);
-        }
+          if (map.containsKey("name") ||
+            map.containsKey("icon") ||
+            map.containsKey("sound") ||
+            map.containsKey("device") ||
+            map.containsKey("color") ||
+            map.containsKey("lowlatency")) {
+            return SFXsChannels.fromMap(map);
+          }
 
-        return e.toString();
-      }).toList();
+          return e.toString();
+        }).toList();
+      } else {
+        return toMap(result);
+      }
     } else {
-      return toMap(result);
+      print('IPC HTTP ${resp.status}: ${resp.statusText}');
+      return null;
     }
+  } on TimeoutException catch (e) {
+    print('IPC request timed out: $e');
+    return null;
   } catch (e) {
-    printText("Error during JS invoking: $e");
-    return;
+    print('IPC request failed: $e');
+    return null;
   }
 }
 
@@ -53,11 +69,11 @@ Map<String, dynamic> toMap(dynamic jsObject) {
 
   final map = <String, dynamic>{};
   try {
-    final keys = js_util.objectKeys(jsObject);
+    final keys = objectKeys(jsObject);
     for (final key in keys) {
       final keyStr = key?.toString();
       if (keyStr != null) {
-        final value = js_util.getProperty(jsObject, keyStr);
+        final value = getProperty(jsObject, keyStr);
         map[keyStr] = value;
       }
     }
@@ -67,18 +83,26 @@ Map<String, dynamic> toMap(dynamic jsObject) {
   return map;
 }
 
+bool _isPrintingText = false;
+
 Future<void> printText(String? text) async {
   String trueText = "null";
   if (text != null) {
     trueText = text;
   }
+  print(trueText);
 
-  await invokeJS("flutter_print", {"text": trueText});
-}
-
-bool get isTauriAvailable {
-	final tauri = js.context["__TAURI__"];
-	return tauri != null && tauri is js.JsObject;
+  // Avoid infinite recursion if invokeJS fails during flutter_print
+  if (_isPrintingText) {
+    return;
+  }
+  
+  _isPrintingText = true;
+  try {
+    await invokeJS("flutter_print", {"text": trueText});
+  } finally {
+    _isPrintingText = false;
+  }
 }
 
 class SFXsChannels {

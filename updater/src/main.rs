@@ -284,16 +284,16 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
     stdout().flush()?;
 
     #[cfg(target_os = "windows")]
-    let path_com = env!("LOCALAPPDATA").to_string() + "\\com.glowyghost.vice";
+    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
 
     #[cfg(target_os = "linux")]
-    let path_com = std::env::var("HOME").unwrap_or_default() + "/.local/share/com.glowyghost.vice";
+    let path_save = std::env::var("HOME").unwrap_or_default() + "/.local/share/Vice";
 
     loop {
-        if is_folder_unlocked(path_com.clone()) {
+        if is_folder_unlocked(path_save.clone()) {
             break;
         }
-        if !Path::new(&path_com).exists() {
+        if !Path::new(&path_save).exists() {
             break;
         }
 
@@ -324,31 +324,6 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
             errored = true;
         }
     }
-    println!();
-    stdout().flush()?;
-
-    //com.glowyghost.vice deletion
-    stdout().flush()?;
-    println!();
-
-    print!("Deleting WebView data...");
-
-    let res_com = delete_folder(path_com.clone());
-
-    match res_com {
-        Ok(_) => {
-            print!("\rDeleted WebView data...     ");
-        }
-        Err(e) => {
-            if e.to_string().contains("Directory does not exist") {
-                print!("\rDirectory \"{}\" does not exist. It's been deleted already.", path_com);
-            } else {
-                print!("\rFailed to delete folder \"{}\": {}", path_com, e);
-                errored = true;
-            }
-        }
-    }
-    println!();
     println!();
     stdout().flush()?;
 
@@ -459,16 +434,16 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
     stdout().flush()?;
 
     #[cfg(target_os = "windows")]
-    let path_com = env!("LOCALAPPDATA").to_string() + "\\com.glowyghost.vice";
+    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
 
     #[cfg(target_os = "linux")]
-    let path_com = std::env::var("HOME").unwrap_or_default() + "/.local/share/com.glowyghost.vice";
+    let path_save = std::env::var("HOME").unwrap_or_default() + "/.local/share/Vice";
 
     loop {
-        if is_folder_unlocked(path_com.clone()) {
+        if is_folder_unlocked(path_save.clone()) {
             break;
         }
-        if !Path::new(&path_com).exists() {
+        if !Path::new(&path_save).exists() {
             break;
         }
 
@@ -481,40 +456,11 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut errored = false;
 
-    //com.glowyghost.vice deletion
-    stdout().flush()?;
-    println!();
-
-    print!("Deleting WebView data...");
-
-    let res_com = delete_folder(path_com.clone());
-
-    match res_com {
-        Ok(_) => {
-            print!("\rDeleted WebView data...     ");
-        }
-        Err(e) => {
-            if e.to_string().contains("Directory does not exist") {
-                print!("\rDirectory \"{}\" does not exist. It's been deleted already.", path_com);
-            } else {
-                print!("\rFailed to delete folder \"{}\": {}", path_com, e);
-                errored = true;
-            }
-        }
-    }
-    println!();
-
     //save data deletion
     stdout().flush()?;
     println!();
 
     print!("Deleting Save Data...");
-
-    #[cfg(target_os = "windows")]
-    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
-
-    #[cfg(target_os = "linux")]
-    let path_save = std::env::var("HOME").unwrap_or_default() + "/.local/share/Vice";
 
     let res_save = delete_folder(path_save.clone());
 
@@ -533,7 +479,7 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    //save data deletion
+    //Vice deletion
     stdout().flush()?;
     println!();
 

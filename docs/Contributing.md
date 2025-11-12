@@ -10,7 +10,7 @@ To work on this project, you need to have installed [Flutter](https://docs.flutt
 Everything for Flutter side of things is in the flutter sub-directory. All the files are in the lib/ sub-directory. To build, run `flutter build web` while being in the flutter sub-directory. This will build the app in build/web sub-directory. This will create loads of files to work, this will be put into `build/web`. Tauri is made to use this directory so no need to copy and paste the files somewhere else.
 
 ### Tauri
-All the files on the Tauri side will be in src-tauri sub-directory. src has the rust files that you should be editing. In the root of the project run `cargo tauri dev` (Use this for hot-reload) or in src-tauri run `cargo run` (For most use-cases, this is better), this will install and build Tauri dependencies in the project before building the actual project. After building it will run the app for you. This will be located in src-tauri/target.
+All the files on the Tauri side is  in the root. `src` has the rust files that you should be editing. In the root of the project run `cargo tauri dev` (Use this for hot-reload) or in src-tauri run `cargo run` (For most use-cases, this is better), this will install and build Tauri dependencies in the project before building the actual project. After building it will run the app for you. This will be located in target.
 
 ### C++
 The files are automatically compilled by `cc-rs` when running `cargo run`. For reasons, Vice tries to not use external libs in C++. To create a C++ file, put the C++ file in an appropriate spot, and use add this template in `build.rs`

@@ -7,17 +7,14 @@ use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
 use crate::monitor;
 
-#[tauri::command]
 pub(crate) fn get_soundboard() -> Vec<SoundboardSFX> {
     files::get_soundboard()
 }
 
-#[tauri::command]
 pub(crate) fn get_channels() -> Vec<Channel> {
     files::get_channels()
 }
 
-#[tauri::command]
 pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, low: bool) -> Result<(), String> {
     let channel: Channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
     let mut channels: Vec<Channel> = files::get_channels();
@@ -26,7 +23,6 @@ pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
-#[tauri::command]
 pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: String, low: bool) -> Result<(), String> {
     let sfx: SoundboardSFX = SoundboardSFX{name, icon, color, sound, lowlatency: low};
     let mut sfxs: Vec<SoundboardSFX> = files::get_soundboard();
@@ -35,7 +31,6 @@ pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: Strin
     return files::save_soundboard(sfxs);
 }
 
-#[tauri::command]
 pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, oldname: String, low: bool) -> Result<(), String> {
     let mut channels: Vec<Channel> = files::get_channels();
 
@@ -49,7 +44,6 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
-#[tauri::command]
 pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound: String, oldname: String, low: bool) -> Result<(), String> {
     let mut sfxs: Vec<SoundboardSFX> = files::get_soundboard();
 
@@ -63,7 +57,6 @@ pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound:
     return files::save_soundboard(sfxs);
 }
 
-#[tauri::command]
 pub(crate) fn delete_channel(name: String) -> Result<(), String> {
     let mut channels: Vec<Channel> = files::get_channels();
 
@@ -76,7 +69,6 @@ pub(crate) fn delete_channel(name: String) -> Result<(), String> {
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
-#[tauri::command]
 pub(crate) fn delete_sound(name: String) -> Result<(), String> {
     let mut sfxs: Vec<SoundboardSFX> = files::get_soundboard();
 
@@ -89,7 +81,6 @@ pub(crate) fn delete_sound(name: String) -> Result<(), String> {
     return files::save_soundboard(sfxs);
 }
 
-#[tauri::command]
 pub(crate) fn pick_menu_sound() -> Option<String> {
     #[cfg(target_os = "windows")]
     let formats: [&str; 6] = ["wav", "mp3", "wma", "aac", "m4a", "flac"];
@@ -106,17 +97,14 @@ pub(crate) fn pick_menu_sound() -> Option<String> {
     }
 }
 
-#[tauri::command]
 pub(crate) fn get_devices() -> Vec<String> {
     audio::inputs()
 }
 
-#[tauri::command]
 pub(crate) fn get_apps() -> Vec<String> {
     audio::apps()
 }
 
-#[tauri::command]
 pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bool, peaks: bool) -> Result<(), String> {
     let mut settings: Settings = files::get_settings();
     settings.output = output;
@@ -128,22 +116,18 @@ pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bo
     files::save_settings(settings).map(|_| {audio::restart(); monitor::change_bool(monitor)})
 }
 
-#[tauri::command]
 pub(crate) fn get_performance() -> String {
     serde_json::to_string(&monitor::get_data()).unwrap_or_else(|_| "{}".to_string())
 }
 
-#[tauri::command]
 pub(crate) fn clear_performance() {
     monitor::clear_data();
 }
 
-#[tauri::command]
 pub(crate) fn get_settings() -> Settings {
     files::get_settings()
 }
 
-#[tauri::command]
 pub(crate) fn set_volume(name: String, volume: f32) {
     let mut channels: Vec<Channel> = files::get_channels();
 
@@ -161,37 +145,18 @@ pub(crate) fn set_volume(name: String, volume: f32) {
     files::save_channels(channels).unwrap_or_else(|e| eprintln!("Error saving channels: {}", e));
 }
 
-#[tauri::command]
 pub(crate) fn get_outputs() -> Vec<String> {
     audio::outputs()
 }
 
-#[tauri::command]
-pub(crate) fn get_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
-#[tauri::command]
-pub(crate) fn open_link(url: String) -> Result<(), String> {
-    open::that(url).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub(crate) fn play_sound(sound: String, low: bool) {
     audio::play_sfx(&sound, low);
 }
 
-#[tauri::command]
 pub(crate) fn get_volume(name: String, get: bool, device: bool) -> String {
     audio::get_volume_parsed(name, get, device)
 }
 
-#[tauri::command]
-pub(crate) fn flutter_print(text: &str) {
-    println!("{}", text)
-}
-
-#[tauri::command]
 pub(crate) fn uninstall() -> Result<String, String> {
     let res: MessageDialogResult = MessageDialog::new()
         .set_title("Uninstall")
@@ -205,8 +170,7 @@ pub(crate) fn uninstall() -> Result<String, String> {
     Ok("Undid".to_string())
 }
 
-#[tauri::command]
-pub(crate) async fn update() -> Result<String, String> {
+pub(crate) fn update() -> Result<String, String> {
     #[derive(Deserialize)]
     struct Release {
         name: String
@@ -223,15 +187,13 @@ pub(crate) async fn update() -> Result<String, String> {
 
     let url = "https://api.github.com/repos/GlowyGhost/Vice/releases/latest";
 
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     let mut res = client
         .get(url)
         .header("User-Agent", "Vice-app")
         .send()
-        .await
         .map_err(|e| e.to_string())?
         .json::<Release>()
-        .await
         .map_err(|e| e.to_string())?;
 
     res.name.remove(0);

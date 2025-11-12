@@ -49,7 +49,7 @@ jobs:
       - name: Build Updater
         shell: bash
         run: |
-          cd src-tauri/updater
+          cd updater
           cargo build -r
 
       - name: Upload updater (Windows)
@@ -57,14 +57,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: src-tauri/updater/target/release/updater.exe
+          path: updater/target/release/updater.exe
 
       - name: Upload updater (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: src-tauri/updater/target/release/updater
+          path: updater/target/release/updater
   
   debug:
     name: Build Debug App
@@ -114,8 +114,7 @@ jobs:
       - name: Install frontend deps if package.json exists
         shell: bash
         run: |
-          if [ -f src-tauri/package.json ]; then
-            cd src-tauri
+          if [ -f package.json ]; then
             npm install
           else
             echo "No package.json found, skipping npm install"
@@ -125,7 +124,6 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cd src-tauri
           ren icons icons-release
           ren icons-console icons
 
@@ -145,26 +143,25 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: src-tauri/updater/target/release
+          path: updater/target/release
 
       - name: Build Tauri app
         shell: bash
         run: |
-          cd src-tauri
           cargo build
 
       - name: Rename Files (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cd src-tauri/target/debug
+          cd target/debug
           Rename-Item -Path Vice.exe -NewName Vice-debug.exe
 
       - name: Rename Files (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          cd src-tauri/target/debug
+          cd target/debug
           mv Vice Vice-debug
 
       - name: Upload debug build (Windows)
@@ -172,14 +169,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debug-${{ matrix.os }}
-          path: src-tauri/target/debug/Vice-debug.exe
+          path: target/debug/Vice-debug.exe
 
       - name: Upload debug build (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: debug-${{ matrix.os }}
-          path: src-tauri/target/debug/Vice-debug
+          path: target/debug/Vice-debug
 
   app:
     name: Build Tauri App
@@ -229,8 +226,7 @@ jobs:
       - name: Install frontend deps if package.json exists
         shell: bash
         run: |
-          if [ -f src-tauri/package.json ]; then
-            cd src-tauri
+          if [ -f package.json ]; then
             npm install
           else
             echo "No package.json found, skipping npm install"
@@ -252,12 +248,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: updater-${{ matrix.os }}
-          path: src-tauri/updater/target/release
+          path: updater/target/release
 
       - name: Build Tauri app
         shell: bash
         run: |
-          cd src-tauri
           cargo build --release
 
       - name: Upload release build (Windows)
@@ -265,14 +260,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
-          path: src-tauri/target/release/Vice.exe
+          path: target/release/Vice.exe
         
       - name: Upload release build (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
-          path: src-tauri/target/release/Vice
+          path: target/release/Vice
 
   zip:
     name: Zip Artifacts
