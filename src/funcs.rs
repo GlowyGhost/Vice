@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
-use crate::monitor;
+use crate::performance;
 
 pub(crate) fn get_soundboard() -> Vec<SoundboardSFX> {
     files::get_soundboard()
@@ -113,15 +113,15 @@ pub(crate) fn save_settings(output: String, scale: f32, light: bool, monitor: bo
     settings.monitor = monitor;
     settings.peaks = peaks;
 
-    files::save_settings(settings).map(|_| {audio::restart(); monitor::change_bool(monitor)})
+    files::save_settings(settings).map(|_| {audio::restart(); performance::change_bool(monitor)})
 }
 
 pub(crate) fn get_performance() -> String {
-    serde_json::to_string(&monitor::get_data()).unwrap_or_else(|_| "{}".to_string())
+    serde_json::to_string(&performance::get_data()).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub(crate) fn clear_performance() {
-    monitor::clear_data();
+    performance::clear_data();
 }
 
 pub(crate) fn get_settings() -> Settings {

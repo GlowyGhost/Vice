@@ -6,7 +6,6 @@ use std::{
 };
 use once_cell::sync::Lazy;
 use serde::Serialize;
-use sysinfo::System;
 
 use crate::files;
 
@@ -17,49 +16,48 @@ pub(crate) struct Data {
     pub(crate) general: HashMap<String, f32>,
 }
 
+#[link(name = "performance")]
+extern "C" {
+    fn get_sys_cpu() -> f32;
+    fn get_app_cpu() -> f32;
+    fn get_sys_ram() -> u64;
+    fn get_app_ram() -> u64;
+    fn get_total_ram() -> u64;
+}
+
 static RUN_MONITOR: AtomicBool = AtomicBool::new(true);
 static PERFORMANCE: Lazy<Mutex<Data>> = Lazy::new(|| Mutex::new(Data::default()));
 
-fn run_loop() {
-    let mut sys = System::new_all();
 
+fn run_loop() {
     loop {
         if !RUN_MONITOR.load(Ordering::SeqCst) {
             break;
         }
 
-        sys.refresh_all();
+        let total_ram: u64 = unsafe { get_total_ram() };
+        let used_ram: u64 = unsafe { get_sys_ram() };
+        let app_cpu: f32 = unsafe { get_app_cpu() };
+        let avg_cpu: f32 = unsafe { get_sys_cpu() };
+        let app_ram: u64 = unsafe { get_app_ram() };
 
-        let total_mem: u64 = sys.total_memory() / 1024 / 1024;
-        let used_mem: u64 = sys.used_memory() / 1024 / 1024;
-        let avg_cpu: f32 = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / sys.cpus().len() as f32;
+        let mut per = PERFORMANCE.lock().unwrap();
 
-        if let Ok(pid) = sysinfo::get_current_pid() {
-            if let Some(proc) = sys.process(pid) {
-                let app_cpu: f32 = proc.cpu_usage();
-                let app_mem: u64 = proc.memory() / 1024 / 1024;
+        per.system.entry("cpu".into()).or_default().push((avg_cpu * 100.0).round() / 100.0);
+        per.system.entry("ram".into()).or_default().push(used_ram as f32);
+        per.app.entry("cpu".into()).or_default().push((app_cpu * 100.0).round() / 100.0);
+        per.app.entry("ram".into()).or_default().push(app_ram as f32);
 
-                let mut per = PERFORMANCE.lock().unwrap();
+        per.general.insert("ram".into(), total_ram as f32);
+        for vec in per.system.values_mut() {
+            while vec.len() > 10 {
+                vec.remove(0);
+            }
+        }
 
-                per.system.entry("cpu".into()).or_default().push((avg_cpu * 100.0).round() / 100.0);
-                per.system.entry("mem".into()).or_default().push(used_mem as f32);
-
-                per.app.entry("cpu".into()).or_default().push((app_cpu * 100.0).round() / 100.0);
-                per.app.entry("mem".into()).or_default().push(app_mem as f32);
-
-                per.general.insert("mem".into(), total_mem as f32);
-
-                for vec in per.system.values_mut() {
-                    while vec.len() > 10 {
-                        vec.remove(0);
-                    }
-                }
-
-                for vec in per.app.values_mut() {
-                    while vec.len() > 10 {
-                        vec.remove(0);
-                    }
-                }
+        for vec in per.app.values_mut() {
+            while vec.len() > 10 {
+                vec.remove(0);
             }
         }
 

@@ -10,6 +10,12 @@ fn main() {
         .cpp(true)
         .file("src/audio/audio.cpp");
 
+    cc::Build::new()
+        .cpp(true)
+        .file("src/performance/performance.cpp")
+        .compile("performance");
+
+        
     #[cfg(target_os = "linux")]
     {
         let gst_flags = pkg_config::Config::new()

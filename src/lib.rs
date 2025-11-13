@@ -7,7 +7,7 @@ use tray_icon::{Icon as TrayIcon, TrayIconBuilder, menu::{Menu, MenuEvent, MenuI
 use wry::{WebViewBuilder, WebView};
 
 mod funcs;
-mod monitor;
+mod performance;
 mod audio;
 mod files;
 
@@ -426,7 +426,7 @@ pub fn run() {
 
     files::create_files();
     audio::start();
-    monitor::start();
+    performance::start();
 
     let (tx, rx) = std::sync::mpsc::channel();
     let event_loop = EventLoopBuilder::<ServerCommand>::with_user_event().build();
