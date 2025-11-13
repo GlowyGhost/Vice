@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'invoke_js.dart';
+import 'randoms.dart';
 import 'settings/page.dart';
 import 'window.dart';
 
@@ -33,12 +34,8 @@ class App extends StatelessWidget {
         return MaterialApp(
           title: "Vice",
           theme: ThemeData(
-            scaffoldBackgroundColor: settings.lightMode
-              ? const Color(0xFFCCCCCC)
-              : const Color(0xFF262626),
-            primaryColor: settings.lightMode
-              ? const Color(0xFFCCCCCC)
-              : const Color(0xFF262626),
+            scaffoldBackgroundColor: bg_dark,
+            primaryColor: bg_dark,
           ),
           home: const ScaledWindow(),
         );

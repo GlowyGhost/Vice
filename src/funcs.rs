@@ -182,6 +182,12 @@ pub(crate) fn update() -> Result<String, String> {
     ).is_ok();
 
     if connected == false {
+        MessageDialog::new()
+            .set_title("No Internet Connection")
+            .set_description("It appears there is no internet connection.")
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+
         return Ok("No Internet".to_string());
     }
 
@@ -199,6 +205,12 @@ pub(crate) fn update() -> Result<String, String> {
     res.name.remove(0);
 
     if res.name == env!("CARGO_PKG_VERSION") {
+        MessageDialog::new()
+            .set_title("No Update")
+            .set_description("It appears there is no update available.")
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+
         return Ok("No Update".to_string());
     }
 

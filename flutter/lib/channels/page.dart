@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../settings/page.dart';
+import '../randoms.dart';
 import 'edit_page.dart';
 import 'main_page.dart';
 import 'new_page.dart';
@@ -25,8 +25,8 @@ class _ChannelsManagerState extends State<ChannelsManagerDisplay> {
                 children: [
                   ElevatedButton.icon(
                     style: TextButton.styleFrom(
-                      backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
-                      foregroundColor: Colors.purpleAccent
+                      backgroundColor: bg_light,
+                      foregroundColor: accent
                     ),
                     onPressed: () => {ChannelsPageClass.setPage(ChannelsNew())},
                     icon: const Icon(Icons.add),
@@ -68,7 +68,7 @@ class DeviceDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Color(0xFF363636),
+      backgroundColor: bg_mid,
       insetPadding: EdgeInsets.all(20),
       child: Container(
         width: double.maxFinite,
@@ -86,7 +86,7 @@ class DeviceDropdown extends StatelessWidget {
                 padding: EdgeInsets.all(8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Color(0xFF3F3F3F),
+                    color: bg_light,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(devices[index], style: TextStyle(fontSize: 30, color: Colors.white)),

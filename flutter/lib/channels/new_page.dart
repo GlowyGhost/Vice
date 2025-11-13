@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vice/invoke_js.dart';
-import '../icons.dart';
-import '../settings/page.dart';
+import '../randoms.dart';
 import 'main_page.dart';
 import 'page.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -81,13 +80,13 @@ class _ChannelsNewState extends State<ChannelsNew> {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          backgroundColor: const Color(0xFF363636),
+                          backgroundColor: bg_mid,
                           title: const Text("Choose a color", style: TextStyle(color: Colors.white)),
                           content: SingleChildScrollView(
                             child: Theme(
                               data: Theme.of(context).copyWith(
-                                canvasColor: const Color(0xFF363636),
-                                popupMenuTheme: const PopupMenuThemeData(color: Color(0xFF363636), textStyle: TextStyle(color: Colors.white)),
+                                canvasColor: bg_mid,
+                                popupMenuTheme: PopupMenuThemeData(color: bg_mid, textStyle: TextStyle(color: Colors.white)),
                                 textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
                                 primaryTextTheme: Theme.of(context).primaryTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
                               ),
@@ -125,13 +124,13 @@ class _ChannelsNewState extends State<ChannelsNew> {
                   Expanded(
                     child: TextField(
                       controller: controllerName,
-                      style: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
+                      style: TextStyle(color: text),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
                         labelText: "Enter name",
-                        labelStyle: TextStyle(color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)),
+                        labelStyle: TextStyle(color: accent),
                         filled: true,
-                        fillColor: settings.lightMode ? const Color(0xFF999999) : const Color(0xFF363636),
+                        fillColor: bg_light,
                       ),
                     ),
                   ),
@@ -144,7 +143,7 @@ class _ChannelsNewState extends State<ChannelsNew> {
                 children: [
                   IconButton(
                     icon: Icon(getIcon(icon)),
-                    color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF),
+                    color: text,
                     iconSize: 96,
                     onPressed: () {
                       showDialog(
@@ -174,7 +173,7 @@ class _ChannelsNewState extends State<ChannelsNew> {
                           ),
                         );
                       },
-                      child: Text(selectedDeviceApp, style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)))
+                      child: Text(selectedDeviceApp, style: TextStyle(fontSize: 30, color: text))
                     )
                   ),
                 ],
@@ -196,15 +195,16 @@ class _ChannelsNewState extends State<ChannelsNew> {
                       ),
                     );
                   },
-                  child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)))
+                  child: Text(device == true ? "Capture device" : "Capture App", style: TextStyle(fontSize: 30, color: text))
                 )
               ),
 
               const SizedBox(height: 20),
 
               SwitchListTile(
-                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: text)),
                 value: lowlatency,
+                activeColor: accent,
                 onChanged: (value) {
                   setState(() => lowlatency = value);
                 },
@@ -220,8 +220,8 @@ class _ChannelsNewState extends State<ChannelsNew> {
 					children: [
 						ElevatedButton.icon(
               style: TextButton.styleFrom(
-                backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
-                foregroundColor: Colors.purpleAccent
+                backgroundColor: bg_light,
+                foregroundColor: accent
               ),
 							onPressed: _save,
 							icon: const Icon(Icons.save),
@@ -232,8 +232,8 @@ class _ChannelsNewState extends State<ChannelsNew> {
 
             ElevatedButton.icon(
               style: TextButton.styleFrom(
-                backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
-                foregroundColor: Colors.purpleAccent
+                backgroundColor: bg_light,
+                foregroundColor: accent
               ),
 							onPressed: () => {ChannelsPageClass.setPage(ChannelsMain())},
 							icon: const Icon(Icons.undo_rounded),

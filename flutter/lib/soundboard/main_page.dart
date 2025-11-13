@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../invoke_js.dart';
 import 'edit_page.dart';
 import 'page.dart';
-import '../icons.dart';
+import '../randoms.dart';
 
 class SFXColor {
 	int r;
@@ -65,7 +65,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
       body: _loading
         ? const Center(child: CircularProgressIndicator())
         : SFXs!.isEmpty
-          ? const Center(child: Text("No Sound Effects Found."))
+          ? Center(child: Text("No Sound Effects Found.", style: TextStyle(fontSize: 24, color: text)))
           : Scaffold(
               body: Scrollbar(
                 controller: scrollController,

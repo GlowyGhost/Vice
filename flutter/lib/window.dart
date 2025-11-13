@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vice/main.dart';
+import 'package:vice/randoms.dart';
 import 'invoke_js.dart';
 import 'performance/page.dart';
 import 'settings/page.dart';
@@ -33,9 +34,7 @@ class _WindowState extends State<Window> {
               width: MediaQuery.of(context).size.width,
               height: 70,
               decoration: BoxDecoration(
-                color: settings.lightMode
-                  ? const Color(0xFFA1A1A1)
-                  : const Color(0xFF1F1F1F),
+                color: bg_mid,
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(36),
                   bottomRight: Radius.circular(36),
@@ -46,13 +45,7 @@ class _WindowState extends State<Window> {
                 children: [
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.channels
-                        ? settings.lightMode
-                          ? Color(0xFF000000)
-                          : Color(0xFFFFFFFF)
-                        : settings.lightMode
-                          ? Color(0x2E2E2E2E)
-                          : Color(0xD1D1D1D1),
+                      foregroundColor: _currentPage == WindowPage.channels ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -64,13 +57,7 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.soundboard
-                        ? settings.lightMode
-                          ? Color(0xFF000000)
-                          : Color(0xFFFFFFFF)
-                        : settings.lightMode
-                          ? Color(0x2E2E2E2E)
-                          : Color(0XFFB3B3B3),
+                      foregroundColor: _currentPage == WindowPage.soundboard ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -82,13 +69,7 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.settings
-                        ? settings.lightMode
-                          ? Color(0xFF000000)
-                          : Color(0xFFFFFFFF)
-                        : settings.lightMode
-                          ? Color(0x2E2E2E2E)
-                          : Color(0XFFB3B3B3),
+                      foregroundColor: _currentPage == WindowPage.settings ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
@@ -111,9 +92,7 @@ class _WindowState extends State<Window> {
                           "Version: ${settings.version}",
                           style: TextStyle(
                             fontSize: 16,
-                            color: settings.lightMode
-                              ? Color(0xFF000000)
-                              : Color(0xFFFFFFFF)
+                            color: text
                           ),
                         ),
                         Row(
@@ -121,9 +100,7 @@ class _WindowState extends State<Window> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             IconButton(
-                              icon: Icon(FontAwesomeIcons.github, color: settings.lightMode
-                                ? Color(0xFF000000)
-                                : Color(0xFFFFFFFF)),
+                              icon: Icon(FontAwesomeIcons.github, color: text),
                               onPressed: () async {
                                 await invokeJS("open_link", {"url": "https://github.com/GlowyGhost/Vice"});
                               },
@@ -140,9 +117,7 @@ class _WindowState extends State<Window> {
 
           Expanded(
             child: Container(
-              color: settings.lightMode
-                ? const Color(0xFFCCCCCC)
-                : const Color(0xFF262626),
+              color: bg_dark,
               child: switch (_currentPage) {
                 WindowPage.channels => ChannelsManagerDisplay(),
                 WindowPage.soundboard => SoundboardManagerDisplay(),
@@ -160,13 +135,7 @@ class _WindowState extends State<Window> {
     if (settings.monitor == true) {
       return TextButton(
         style: TextButton.styleFrom(
-          foregroundColor: _currentPage == WindowPage.performance
-            ? settings.lightMode
-              ? Color(0xFF000000)
-              : Color(0xFFFFFFFF)
-            : settings.lightMode
-              ? Color(0x2E2E2E2E)
-              : Color(0XFFB3B3B3),
+          foregroundColor: _currentPage == WindowPage.performance ? text : text_muted,
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
           alignment: Alignment.centerLeft,
         ),

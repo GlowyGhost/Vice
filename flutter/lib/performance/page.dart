@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:vice/randoms.dart';
 import 'dart:async';
 
 import '../invoke_js.dart';
-import '../settings/page.dart';
 
 class Data {
   Map<String, List<double>> system;
@@ -99,8 +99,8 @@ class _PerformancePageState extends State<PerformancePage> {
             children: [
               ElevatedButton.icon(
                 style: TextButton.styleFrom(
-                  backgroundColor: settings.lightMode ? const Color(0xFF262626) : const Color(0xFFCCCCCC),
-                  foregroundColor: Colors.purpleAccent,
+                  backgroundColor: bg_light,
+                  foregroundColor: accent
                 ),
                 onPressed: _init,
                 icon: const Icon(Icons.refresh),
@@ -111,8 +111,8 @@ class _PerformancePageState extends State<PerformancePage> {
 
               ElevatedButton.icon(
                 style: TextButton.styleFrom(
-                  backgroundColor: settings.lightMode ? const Color(0xFF262626) : const Color(0xFFCCCCCC),
-                  foregroundColor: Colors.purpleAccent,
+                  backgroundColor: bg_light,
+                  foregroundColor: accent
                 ),
                 onPressed: _clear,
                 icon: const Icon(Icons.clear),
@@ -126,7 +126,7 @@ class _PerformancePageState extends State<PerformancePage> {
                     children: [
                       Container(color: Colors.blue, width: 30, height: 30),
                       const SizedBox(width: 8),
-                      Text("Vice", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                      Text("Vice", style: TextStyle(fontSize: 18, color: text)),
                     ],
                   ),
                   const SizedBox(width: 12),
@@ -134,7 +134,7 @@ class _PerformancePageState extends State<PerformancePage> {
                     children: [
                       Container(color: Colors.red, width: 30, height: 30),
                       const SizedBox(width: 8),
-                      Text("System", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                      Text("System", style: TextStyle(fontSize: 18, color: text)),
                     ],
                   ),
                 ],
@@ -146,13 +146,13 @@ class _PerformancePageState extends State<PerformancePage> {
           child: _loading && data == null
             ? const Center(child: CircularProgressIndicator())
             : data == null
-              ? const Center(child: Text("No data"))
+              ? Center(child: Text("No data", style: TextStyle(fontSize: 24, color: text)))
               : SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      Text("CPU Usage", style: TextStyle(fontSize: 36, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                      Text("CPU Usage", style: TextStyle(fontSize: 36, color: text)),
 
                       const SizedBox(height: 12),
 
@@ -174,7 +174,7 @@ class _PerformancePageState extends State<PerformancePage> {
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   reservedSize: 40,
-                                  getTitlesWidget: (value, meta) => Text("${value.toInt().toString()}%", style: TextStyle(fontSize: 10, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                                  getTitlesWidget: (value, meta) => Text("${value.toInt().toString()}%", style: TextStyle(fontSize: 10, color: text)),
                                 ),
                               ),
                             ),
@@ -200,7 +200,7 @@ class _PerformancePageState extends State<PerformancePage> {
 
                       const SizedBox(height: 32),
 
-                      Text("RAM Usage", style: TextStyle(fontSize: 36, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                      Text("RAM Usage", style: TextStyle(fontSize: 36, color: text)),
 
                       const SizedBox(height: 12),
                       
@@ -222,7 +222,7 @@ class _PerformancePageState extends State<PerformancePage> {
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   reservedSize: 40,
-                                  getTitlesWidget: (value, meta) => Text(value.toInt() >= 1000 ? "${(value.toInt() / 1000).toString()}GB" : "${value.toInt().toString()}MB", style: TextStyle(fontSize: 10, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                                  getTitlesWidget: (value, meta) => Text(value.toInt() >= 1000 ? "${(value.toInt() / 1000).toString()}GB" : "${value.toInt().toString()}MB", style: TextStyle(fontSize: 10, color: text)),
                                 ),
                               ),
                             ),

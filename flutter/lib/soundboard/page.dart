@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../settings/page.dart';
+import '../randoms.dart';
 import 'new_page.dart';
 import 'edit_page.dart';
 import 'main_page.dart';
@@ -25,8 +25,8 @@ class _SoundboardManagerState extends State<SoundboardManagerDisplay> {
                 children: [
                   ElevatedButton.icon(
                     style: TextButton.styleFrom(
-                      backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
-                      foregroundColor: Colors.purpleAccent
+                      backgroundColor: bg_light,
+                      foregroundColor: accent
                     ),
                     onPressed: () => {SoundboardPageClass.setPage(SoundboardNew())},
                     icon: const Icon(Icons.add),

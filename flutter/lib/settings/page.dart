@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vice/randoms.dart';
 import '../channels/page.dart';
 import '../invoke_js.dart';
 import '../main.dart';
@@ -64,15 +65,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _update() async {
-    String res = await invokeJS("update");
-
-    if (res == "Undid") {
-      showBar("Cancelled Update.");
-    } else if (res == "No Update") {
-      showBar("There currently is no new availiable update.");
-    } else if (res == "No Internet") {
-      showBar("No Internet Connection.");
-    }
+    await invokeJS("update");
   }
 
   @override
@@ -86,8 +79,8 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 ElevatedButton.icon(
                   style: TextButton.styleFrom(
-                    backgroundColor: settings.lightMode ? const Color(0xFF262626) : Color(0xFFCCCCCC),
-                    foregroundColor: Colors.purpleAccent
+                    backgroundColor: bg_light,
+                    foregroundColor: accent
                   ),
                   onPressed: _save,
                   icon: const Icon(Icons.save),
@@ -113,7 +106,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Row(
                         children: [
-                          Text("   Output:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                          Text("   Output:", style: TextStyle(fontSize: 18, color: text)),
                           Expanded(
                             child: TextButton(
                               onPressed: () {
@@ -127,7 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ),
                                 );
                               },
-                              child: Text(outputDevice, style: TextStyle(fontSize: 30, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF)))
+                              child: Text(outputDevice, style: TextStyle(fontSize: 30, color: text))
                             ),
                           )
                         ],
@@ -136,8 +129,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Light mode:     ", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        title: Text("Light mode:     ", style: TextStyle(fontSize: 18, color: text)),
                         value: lightMode,
+                        activeColor: accent,
                         onChanged: (value) {
                           setState(() => lightMode = value);
                         },
@@ -147,7 +141,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       Row(
                         children: [
-                          Text("   Scale:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                          Text("   Scale:", style: TextStyle(fontSize: 18, color: text)),
                           Expanded(
                             child: Slider(
                               value: scale,
@@ -166,8 +160,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Monitor Performance:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        title: Text("Monitor Performance:", style: TextStyle(fontSize: 18, color: text)),
                         value: monitor,
+                        activeColor: accent,
                         onChanged: (value) {
                           setState(() => monitor = value);
                         },
@@ -176,8 +171,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Display channel peaks:", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                        title: Text("Display channel peaks:", style: TextStyle(fontSize: 18, color: text)),
                         value: peaks,
+                        activeColor: accent,
                         onChanged: (value) {
                           setState(() => peaks = value);
                         },
@@ -198,7 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             TextButton(
               onPressed: () => _update(),
-              child: Text("Update", style: TextStyle(fontSize: 24, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+              child: Text("Update", style: TextStyle(fontSize: 24, color: text)),
             ),
 
             const SizedBox(height: 20),

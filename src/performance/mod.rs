@@ -30,6 +30,7 @@ static PERFORMANCE: Lazy<Mutex<Data>> = Lazy::new(|| Mutex::new(Data::default())
 
 
 fn run_loop() {
+    println!("Starting performance monitor loop");
     loop {
         if !RUN_MONITOR.load(Ordering::SeqCst) {
             break;

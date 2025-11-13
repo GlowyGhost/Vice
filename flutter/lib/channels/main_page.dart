@@ -4,7 +4,7 @@ import 'dart:async';
 import '../invoke_js.dart';
 import 'edit_page.dart';
 import 'page.dart';
-import '../icons.dart';
+import '../randoms.dart';
 
 class ChannelsColor {
 	int r;
@@ -69,7 +69,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
       body: _loading
         ? const Center(child: CircularProgressIndicator())
         : Channels!.isEmpty
-          ? const Center(child: Text("No Channels Found."))
+          ? Center(child: Text("No Channels Found.", style: TextStyle(fontSize: 24, color: text)))
           : Scaffold(
               body: Scrollbar(
                 controller: scrollController,
