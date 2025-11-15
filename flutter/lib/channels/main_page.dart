@@ -67,7 +67,7 @@ class _ChannelsMainState extends State<ChannelsMain> {
 
     return Scaffold(
       body: _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? Center(child: CircularProgressIndicator(color: accent))
         : Channels!.isEmpty
           ? Center(child: Text("No Channels Found.", style: TextStyle(fontSize: 24, color: text)))
           : Scaffold(
@@ -112,7 +112,7 @@ class ChannelBar extends StatefulWidget {
 
 class _ChannelBarState extends State<ChannelBar> {
   double sliderVolume = 0;
-  late double volume;
+  double volume = 0.0;
   String translatedName = "null";
   Timer? _timer;
 

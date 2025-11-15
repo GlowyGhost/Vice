@@ -63,7 +63,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
 
     return Scaffold(
       body: _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? Center(child: CircularProgressIndicator(color: accent))
         : SFXs!.isEmpty
           ? Center(child: Text("No Sound Effects Found.", style: TextStyle(fontSize: 24, color: text)))
           : Scaffold(

@@ -21,8 +21,10 @@ pub struct App {
     webview: Option<WebView>,
 }
 
+#[derive(PartialEq)]
 pub enum ServerCommand {
     CreateWindow,
+    IpcRequest { id: String, cmd: String, args: serde_json::Value },
 }
 
 #[cfg(target_os = "windows")]
@@ -32,10 +34,10 @@ const ICON: &[u8; 12672] = include_bytes!("../icons/icon.png");
 
 fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
     if cmd == "get_soundboard" {
-        let soundboard = funcs::get_soundboard();
+        let soundboard = files::get_soundboard();
         return json!({"result": soundboard});
     } else if cmd == "get_channels" {
-        let channels = funcs::get_channels();
+        let channels = files::get_channels();
         return json!({"result": channels});
     } else if cmd == "new_channel" {
         if let Some(col) = args.get("color").and_then(|v| v.as_array()) {
@@ -317,38 +319,8 @@ pub fn run_server(ready_tx: &std::sync::mpsc::Sender<()>, proxy: EventLoopProxy<
     
     ready_tx.send(()).unwrap();
 
-    for mut request in server.incoming_requests() {
-        if request.method() == &tiny_http::Method::Post && request.url() == "/ipc" {
-            let mut body = String::new();
-            if let Err(e) = request.as_reader().read_to_string(&mut body) {
-                let _ = request.respond(
-                    Response::from_string(format!("Failed to read request body: {}", e)).with_status_code(400)
-                );
-                continue;
-            }
-
-            match serde_json::from_str::<serde_json::Value>(&body) {
-                Ok(val) => {
-                    let cmd = val.get("cmd").and_then(|v| v.as_str());
-                    let args = val.get("args").cloned().unwrap_or(serde_json::Value::Null);
-
-                    if let Some(cmd_str) = cmd {
-                        let result = handle_ipc(cmd_str, args);
-                        let body = serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string());
-                        let mut response = Response::from_string(body);
-                        response.add_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
-                        let _ = request.respond(response);
-                    } else {
-                        let _ = request.respond(Response::from_string("Missing 'cmd' field").with_status_code(400));
-                    }
-                }
-                Err(e) => {
-                    let _ = request.respond(Response::from_string(format!("Invalid JSON: {}", e)).with_status_code(400));
-                }
-            }
-
-            continue;
-        } else if request.method() == &tiny_http::Method::Get && request.url() == "/webview" {
+    for request in server.incoming_requests() {
+        if request.method() == &tiny_http::Method::Get && request.url() == "/webview" {
             let _ = proxy.send_event(ServerCommand::CreateWindow);
             let mut response = Response::from_string("Success");
             response.add_header(Header::from_bytes(&b"Content-Type"[..], &b"text/plain"[..]).unwrap());
@@ -385,7 +357,7 @@ pub fn run_server(ready_tx: &std::sync::mpsc::Sender<()>, proxy: EventLoopProxy<
     }
 }
 
-pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, app: &Rc<RefCell<App>>, hide_window: bool) {
+pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, proxy: EventLoopProxy<ServerCommand>, app: &Rc<RefCell<App>>, hide_window: bool) {
     if app.borrow().window.is_none() {
         if !hide_window {
             let icon = create_icon().map(|(data, width, height)| Icon::from_rgba(data, width, height).unwrap());
@@ -404,6 +376,20 @@ pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, app: &Rc
             let webview = WebViewBuilder::new()
                 .with_url("http://127.0.0.1:5923")
                 .with_devtools(true)
+                .with_ipc_handler({
+                    let proxy = proxy.clone();
+                    move |req| {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(req.body()) {
+                            if v["ipc_type"] == "request" {
+                                let id = v["id"].as_str().unwrap().to_string();
+                                let cmd = v["cmd"].as_str().unwrap().to_string();
+                                let args = v["args"].clone();
+
+                                proxy.send_event(ServerCommand::IpcRequest { id, cmd, args }).ok();
+                            }
+                        }
+                    }
+                })
                 .build(&app.borrow().window.as_ref().unwrap())
                 .unwrap();
 
@@ -432,8 +418,11 @@ pub fn run() {
     let event_loop = EventLoopBuilder::<ServerCommand>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     
-    thread::spawn(move || {
-        run_server(&tx, proxy);
+    thread::spawn({
+        let proxy = proxy.clone();
+        move || {
+            run_server(&tx, proxy);
+        }
     });
     rx.recv().unwrap();
 
@@ -441,7 +430,7 @@ pub fn run() {
     let hide_window: bool = args.contains(&"--background".to_string());
 
     let app = Rc::new(RefCell::new(App::default()));
-    create_window(&event_loop, &app, hide_window);
+    create_window(&event_loop, proxy.clone(), &app, hide_window);
 
     let tray_icon = create_icon().map(|(data, width, height)| TrayIcon::from_rgba(data, width, height).unwrap())
         .unwrap_or(TrayIcon::from_rgba(vec![0, 0, 0, 0], 1, 1).unwrap());
@@ -473,9 +462,29 @@ pub fn run() {
                 app.try_borrow_mut().unwrap().webview = None;
                 app.try_borrow_mut().unwrap().window = None;
             },
-            Event::UserEvent(ServerCommand::CreateWindow) => {
-                create_window(event_loop_target, &app, false);
-            },
+            Event::UserEvent(e) => match e {
+                ServerCommand::CreateWindow => create_window(event_loop_target, proxy.clone(), &app, false),
+                ServerCommand::IpcRequest { id, cmd, args } => {
+                    let res = handle_ipc(&cmd, args);
+                    if let Some(webview) = &app.borrow().webview {
+                        let result_value = match res.get("result") {
+                            Some(v) => v.clone(),
+                            None => res.clone(),
+                        };
+
+                        let js = format!(
+                            "window.postMessage({{ ipc_type: 'response', id: '{}', result: {} }}, '*');",
+                            id,
+                            result_value.to_string()
+                        );
+                        
+                        match webview.evaluate_script(&js) {
+                            Ok(_ret) => {},
+                            Err(e) => eprintln!("Failed to return ipc {:?}", e),
+                        }
+                    }
+                }
+            }
             _ => (),
         }
 
@@ -483,7 +492,7 @@ pub fn run() {
             if menu_event.id() == quit.id() {
                 std::process::exit(0);
             } else if menu_event.id() == open_ui.id() {
-                create_window(event_loop_target, &app, false);
+                create_window(event_loop_target, proxy.clone(), &app, false);
             } else if menu_event.id() == restart.id() {
                 audio::restart();
             }

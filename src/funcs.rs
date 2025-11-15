@@ -7,14 +7,6 @@ use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
 use crate::performance;
 
-pub(crate) fn get_soundboard() -> Vec<SoundboardSFX> {
-    files::get_soundboard()
-}
-
-pub(crate) fn get_channels() -> Vec<Channel> {
-    files::get_channels()
-}
-
 pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, low: bool) -> Result<(), String> {
     let channel: Channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
     let mut channels: Vec<Channel> = files::get_channels();

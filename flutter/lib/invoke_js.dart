@@ -1,62 +1,84 @@
-import "dart:js_util";
 import 'dart:html' as html;
+import 'package:js/js_util.dart';
+import 'dart:async';
 import 'dart:convert';
-import "dart:async";
 
-Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) async {
-  final body = jsonEncode({'cmd': cmd, 'args': args ?? {}});
-  try {
-    final resp = await html.HttpRequest.request(
-      '/ipc',
-      method: 'POST',
-      sendData: body,
-      requestHeaders: {'Content-Type': 'application/json'},
-    ).timeout(Duration(seconds: 10));
+final _ipcWaiters = <String, Completer<dynamic>>{};
+final _ipcCmds = <String, String>{};
 
-    if (resp.status == 200) {
-      final text = resp.responseText ?? 'null';
-      final decoded = jsonDecode(text);
-      if (decoded == null) {
-        return null;
-      }
-      final result = decoded['result'];
-      
-      if (result is String || result is bool) {
-        return result;
-      } else if (result == null) {
-        return null;
-      } else if (result is List) {
-        return result.map((e) {
-          if (e is String) {
-            return e;
-          }
+Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) {
+  final id = DateTime.now().microsecondsSinceEpoch.toString();
 
-          final map = toMap(e);
+  final completer = Completer<dynamic>();
+  _ipcWaiters[id] = completer;
 
-          if (map.containsKey("name") ||
-            map.containsKey("icon") ||
-            map.containsKey("sound") ||
-            map.containsKey("device") ||
-            map.containsKey("color") ||
-            map.containsKey("lowlatency")) {
-            return SFXsChannels.fromMap(map);
-          }
+  final payload = {
+    "ipc_type": "request",
+    "id": id,
+    "cmd": cmd,
+    "args": args ?? {},
+  };
 
-          return e.toString();
-        }).toList();
-      } else {
-        return toMap(result);
-      }
-    } else {
-      print('IPC HTTP ${resp.status}: ${resp.statusText}');
-      return null;
+  _ipcCmds[id] = cmd;
+  _sendToHost(payload);
+
+  Timer(const Duration(seconds: 10), () {
+    if (!completer.isCompleted) {
+      _ipcWaiters.remove(id);
+      completer.complete(null);
     }
-  } on TimeoutException catch (e) {
-    print('IPC request timed out: $e');
-    return null;
-  } catch (e) {
-    print('IPC request failed: $e');
-    return null;
+  });
+
+  return completer.future;
+}
+
+void initIpcListener() {
+  html.window.onMessage.listen(_handleMessage);
+
+  html.window.addEventListener('message', (event) {
+    if (event is html.MessageEvent) _handleMessage(event);
+  });
+}
+
+void _handleMessage(html.MessageEvent event) {
+  final data = event.data;
+
+  if (data is Map && data["ipc_type"] == "response") {
+    final id = data["id"];
+		var result = data["result"];
+
+		if (result is String || result is bool) {
+      result = result;
+    } else if (result == null) {
+      result = null;
+    } else if (result is List) {
+      result = result.map((e) {
+        if (e is String) {
+          return e;
+        }
+
+        final map = toMap(e);
+
+        if (map.containsKey("name") ||
+          map.containsKey("icon") ||
+          map.containsKey("sound") ||
+          map.containsKey("device") ||
+          map.containsKey("color") ||
+          map.containsKey("lowlatency")) {
+          return SFXsChannels.fromMap(map);
+        }
+
+        return e.toString();
+      }).toList();
+    } else {
+      result = toMap(result);
+    }
+
+    _ipcCmds.remove(id);
+    if (_ipcWaiters.containsKey(id)) {
+      _ipcWaiters[id]!.complete(result);
+      _ipcWaiters.remove(id);
+    }
   }
 }
 
@@ -83,26 +105,14 @@ Map<String, dynamic> toMap(dynamic jsObject) {
   return map;
 }
 
-bool _isPrintingText = false;
-
 Future<void> printText(String? text) async {
   String trueText = "null";
   if (text != null) {
     trueText = text;
   }
   print(trueText);
-
-  // Avoid infinite recursion if invokeJS fails during flutter_print
-  if (_isPrintingText) {
-    return;
-  }
   
-  _isPrintingText = true;
-  try {
-    await invokeJS("flutter_print", {"text": trueText});
-  } finally {
-    _isPrintingText = false;
-  }
+  invokeJS("flutter_print", {"text": trueText});
 }
 
 class SFXsChannels {
@@ -168,5 +178,57 @@ class Settings {
       monitor: map["monitor"],
       peaks: map["peaks"]
     );
+  }
+}
+
+void _sendToHost(dynamic payload) {
+  try {
+      final String jsonPayload = (() {
+        try {
+          return jsonEncode(payload);
+        } catch (e) {
+          try {
+            if (payload is Map) {
+              final simple = <String, dynamic>{};
+              payload.forEach((k, v) {
+                try {
+                  simple[k.toString()] = v;
+                } catch (_) {
+                  simple[k.toString()] = v.toString();
+                }
+              });
+              return jsonEncode(simple);
+            }
+          } catch (_) {}
+          return '{}';
+        }
+      })();
+
+      if (hasProperty(html.window, 'external') && hasProperty(getProperty(html.window, 'external'), 'invoke')) {
+        final external = getProperty(html.window, 'external');
+        callMethod(external, 'invoke', [jsonPayload]);
+
+        return;
+      }
+
+      if (hasProperty(html.window, 'chrome')) {
+        final chrome = getProperty(html.window, 'chrome');
+        if (hasProperty(chrome, 'webview')) {
+          final webview = getProperty(chrome, 'webview');
+          callMethod(webview, 'postMessage', [jsonPayload]);
+
+          return;
+        }
+      }
+
+    if (hasProperty(html.window, 'ipc') && hasProperty(getProperty(html.window, 'ipc'), 'postMessage')) {
+      final ipc = getProperty(html.window, 'ipc');
+      callMethod(ipc, 'postMessage', [payload]);
+
+      return;
+    }
+    html.window.postMessage(payload, '*');
+  } catch (e) {
+    print('IPC send failed: $e');
   }
 }

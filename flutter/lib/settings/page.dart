@@ -148,6 +148,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               min: 0.1,
                               max: 2.0,
                               divisions: 19,
+                              activeColor: accent,
                               label: scale.toStringAsFixed(1),
                               onChanged: (newScale) {
                                 setState(() {scale = newScale;});
@@ -244,6 +245,8 @@ class SettingsData extends ChangeNotifier {
 
 	Future<void> saveSettings(BuildContext context) async {
 		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor, "peaks": peaks});
+
+    notifyListeners();
 
     final appState = Provider.of<AppStateNotifier>(context, listen: false);
     appState.reload();

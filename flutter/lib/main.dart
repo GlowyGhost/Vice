@@ -1,5 +1,5 @@
 import 'dart:ui';
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'invoke_js.dart';
@@ -9,19 +9,35 @@ import 'window.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  try {
-    await settings.loadSettings();
-  } catch (e) {
-    printText("Error loading settings: $e");
-  }
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppStateNotifier(),
-      child: const App(),
-    ),
-  );
+  // Capture Flutter framework errors and forward them to the host.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+    printText('FlutterError: ${details.exception}\n${details.stack}');
+  };
+
+  // Run app inside a guarded zone to capture uncaught Dart errors.
+  runZonedGuarded(() async {
+    initIpcListener();
+
+    try {
+      await settings.loadSettings();
+    } catch (e, st) {
+      printText("Error loading settings: $e\n$st");
+    }
+
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppStateNotifier()),
+          ChangeNotifierProvider(create: (_) => settings),
+        ],
+        child: const App(),
+      ),
+    );
+  }, (error, stack) {
+    printText('Unhandled error: $error\n$stack');
+  });
 }
 
 class App extends StatelessWidget {
@@ -29,8 +45,8 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppStateNotifier>(
-      builder: (context, appState, _) {
+    return Consumer2<AppStateNotifier, SettingsData>(
+      builder: (context, appState, settingsData, _) {
         return MaterialApp(
           title: "Vice",
           theme: ThemeData(

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'settings/page.dart';
 
-final Color bg_dark = settings.lightMode ? Color(0xFFE6E6E6) : Color(0xFF1A1A1A);
-final Color bg_mid = settings.lightMode ? Color(0xFFF2F2F2) : Color(0xFF262626);
-final Color bg_light = settings.lightMode ? Color(0xFFFFFFFF) : Color(0xFF333333);
-final Color text = settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF);
-final Color text_muted = settings.lightMode ? Color(0xFF4F4F4F) : Color(0xFFB3B3B3);
-final Color accent = settings.lightMode ? Color(0xFF264AFF) : Color(0XFFFFCE3B);
+Color get bg_dark => settings.lightMode ? Color(0xFFE6E6E6) : Color(0xFF1A1A1A);
+Color get bg_mid => settings.lightMode ? Color(0xFFF2F2F2) : Color(0xFF262626);
+Color get bg_light => settings.lightMode ? Color(0xFFFFFFFF) : Color(0xFF333333);
+Color get text => settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF);
+Color get text_muted => settings.lightMode ? Color(0xFF4F4F4F) : Color(0xFFB3B3B3);
+final Color accent = Color(0XFFFFCE3B);
 
 Map<String, IconData> IconMap = {
   "abc": Icons.abc,

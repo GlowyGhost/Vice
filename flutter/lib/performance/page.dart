@@ -29,64 +29,160 @@ class _PerformancePageState extends State<PerformancePage> {
   @override
   void initState() {
     super.initState();
-    _init();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _init());
+    // schedule first init after first frame so the UI can paint quickly
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _init();
+      // ensure we don't create multiple timers accidentally
+      _timer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!mounted) return;
+        _init();
+      });
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _timer = null;
     super.dispose();
   }
 
   Future<void> _init() async {
+    if (!mounted) return;
+
+    // prevent overlapping _init calls
     if (_loading) return;
-    setState(() => _loading = true);
+
+    setState(() {
+      _loading = true;
+    });
 
     try {
-      final jsonString = await invokeJS("get_performance");
-      if (jsonString == null) return;
+      final result = await invokeJS("get_performance");
 
-      final Map<String, dynamic> dataDart = jsonDecode(jsonString);
+      if (!mounted) return;
 
-      final systemRaw = (dataDart['system'] as Map<String, dynamic>);
-      final appRaw = (dataDart['app'] as Map<String, dynamic>);
-      final generalRaw = (dataDart['general'] as Map<String, dynamic>);
+      if (result == null) {
+        await printText("get_performance → null");
+        if (!mounted) return;
+        setState(() => data = null);
+        return;
+      }
 
-      final system = <String, List<double>>{};
-      systemRaw.forEach((k, v) {
-        system[k] = (v as List).map((e) => (e as num).toDouble()).toList();
-      });
+      // Normalize result to Map<String, dynamic>
+      Map<String, dynamic> dataMap;
 
-      final app = <String, List<double>>{};
-      appRaw.forEach((k, v) {
-        app[k] = (v as List).map((e) => (e as num).toDouble()).toList();
-      });
+      if (result is String) {
+        try {
+          final parsed = jsonDecode(result);
+          if (parsed is Map) {
+            dataMap = Map<String, dynamic>.from(parsed);
+          } else {
+            await printText("Decoded performance JSON is not an object: $parsed");
+            if (!mounted) return;
+            setState(() => data = null);
+            return;
+          }
+        } catch (e) {
+          await printText("JSON decode error: $e");
+          if (!mounted) return;
+          setState(() => data = null);
+          return;
+        }
+      } else if (result is Map) {
+        dataMap = Map<String, dynamic>.from(result);
+      } else {
+        await printText("Unexpected type from get_performance: $result");
+        if (!mounted) return;
+        setState(() => data = null);
+        return;
+      }
 
-      final general = <String, double>{};
-      generalRaw.forEach((k, v) {
-        general[k] = (v as num).toDouble();
-      });
+      // basic validation
+      if (!dataMap.containsKey('system') || !dataMap.containsKey('app') || !dataMap.containsKey('general')) {
+        await printText('Invalid performance structure: missing keys');
+        if (!mounted) return;
+        setState(() => data = null);
+        return;
+      }
 
-      system["cpu"] ??= List<double>.filled(5, 0);
-      system["mem"] ??= List<double>.filled(5, 0);
-      app["cpu"] ??= List<double>.filled(5, 0);
-      app["ram"] ??= List<double>.filled(5, 0);
-      general["ram"] = (general["ram"] == null || general["ram"] == 0) ? 1 : general["ram"]!;
+      // Safely build PerformanceData
+      try {
+        final systemRaw = (dataMap['system'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final appRaw = (dataMap['app'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final generalRaw = (dataMap['general'] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
-      setState(() {
-        data = Data(system, app, general);
-      });
-    } catch (e) {
-      await printText('Failed to get performance data: $e');
+        final system = <String, List<double>>{};
+        systemRaw.forEach((k, v) {
+          if (v is List) {
+            try {
+              system[k] = v.map((e) => (e as num).toDouble()).toList();
+            } catch (_) {
+              system[k] = <double>[];
+            }
+          } else {
+            system[k] = <double>[];
+          }
+        });
+
+        final app = <String, List<double>>{};
+        appRaw.forEach((k, v) {
+          if (v is List) {
+            try {
+              app[k] = v.map((e) => (e as num).toDouble()).toList();
+            } catch (_) {
+              app[k] = <double>[];
+            }
+          } else {
+            app[k] = <double>[];
+          }
+        });
+
+        final general = <String, double>{};
+        generalRaw.forEach((k, v) {
+          if (v is num) {
+            general[k] = v.toDouble();
+          } else if (v is String) {
+            general[k] = double.tryParse(v) ?? 0.0;
+          } else {
+            general[k] = 0.0;
+          }
+        });
+
+        // guaranteed minimal arrays for the charts
+        system['cpu'] ??= List<double>.filled(5, 0);
+        system['mem'] ??= List<double>.filled(5, 0);
+        app['cpu'] ??= List<double>.filled(5, 0);
+        app['ram'] ??= List<double>.filled(5, 0);
+
+        if ((general['ram'] ?? 0) <= 0) {
+          general['ram'] = 1;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          data = Data(system, app, general);
+        });
+      } catch (e) {
+        await printText("PerformanceData parse error: $e");
+        if (!mounted) return;
+        setState(() => data = null);
+        return;
+      }
+    } catch (e, st) {
+      await printText("Unexpected _init error: $e\n$st");
+      if (!mounted) return;
+      setState(() => data = null);
     } finally {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
 
   Future<void> _clear() async {
     await invokeJS("clear_performance");
-    _init();
+    await _init();
   }
 
   @override
@@ -100,7 +196,7 @@ class _PerformancePageState extends State<PerformancePage> {
               ElevatedButton.icon(
                 style: TextButton.styleFrom(
                   backgroundColor: bg_light,
-                  foregroundColor: accent
+                  foregroundColor: accent,
                 ),
                 onPressed: _init,
                 icon: const Icon(Icons.refresh),
@@ -112,7 +208,7 @@ class _PerformancePageState extends State<PerformancePage> {
               ElevatedButton.icon(
                 style: TextButton.styleFrom(
                   backgroundColor: bg_light,
-                  foregroundColor: accent
+                  foregroundColor: accent,
                 ),
                 onPressed: _clear,
                 icon: const Icon(Icons.clear),
@@ -144,7 +240,7 @@ class _PerformancePageState extends State<PerformancePage> {
         ),
         Expanded(
           child: _loading && data == null
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: accent))
             : data == null
               ? Center(child: Text("No data", style: TextStyle(fontSize: 24, color: text)))
               : SingleChildScrollView(
@@ -163,8 +259,8 @@ class _PerformancePageState extends State<PerformancePage> {
                             minY: 0,
                             maxY: 100,
                             lineBarsData: [
-                              _line((data!.system["cpu"] ?? []), Colors.red),
-                              _line((data!.app["cpu"] ?? []), Colors.blue),
+                              _line((data?.system["cpu"] ?? const []), Colors.red),
+                              _line((data?.app["cpu"] ?? const []), Colors.blue),
                             ],
                             titlesData: FlTitlesData(
                               bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -179,7 +275,7 @@ class _PerformancePageState extends State<PerformancePage> {
                               ),
                             ),
                             gridData: FlGridData(show: false),
-                            borderData: FlBorderData(show: true),
+                            borderData: FlBorderData(show: true, border: Border.all(color: text_muted)),
 
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
@@ -203,16 +299,16 @@ class _PerformancePageState extends State<PerformancePage> {
                       Text("RAM Usage", style: TextStyle(fontSize: 36, color: text)),
 
                       const SizedBox(height: 12),
-                      
+
                       SizedBox(
                         height: 220,
                         child: LineChart(
                           LineChartData(
                             minY: 0,
-                            maxY: (data!.general["ram"] ?? 1).toDouble() == 0 ? 1 : (data!.general["ram"] ?? 1).toDouble(),
+                            maxY: ((data?.general["ram"] ?? 1) <= 0 ? 1 : (data?.general["ram"] ?? 1)),
                             lineBarsData: [
-                              _line((data!.system["ram"] ?? []), Colors.red),
-                              _line((data!.app["ram"] ?? []), Colors.blue),
+                              _line((data?.system["ram"] ?? const []), Colors.red),
+                              _line((data?.app["ram"] ?? const []), Colors.blue),
                             ],
                             titlesData: FlTitlesData(
                               bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -227,7 +323,7 @@ class _PerformancePageState extends State<PerformancePage> {
                               ),
                             ),
                             gridData: FlGridData(show: false),
-                            borderData: FlBorderData(show: true),
+                            borderData: FlBorderData(show: true, border: Border.all(color: text_muted)),
 
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
