@@ -48,6 +48,7 @@ fn main() {
         println!("cargo:rustc-link-lib=pulse");
     }
 
+    #[cfg(target_os = "windows")]
     winres::WindowsResource::new()
         .set_icon("icons/icon.ico")
         .compile()

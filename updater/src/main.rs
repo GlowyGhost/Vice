@@ -339,7 +339,7 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
 
     #[cfg(target_os = "linux")]
     {
-        Command::new(&old_path)
+        let _ = Command::new(&old_path)
             .spawn();
     }
 

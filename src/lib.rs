@@ -373,6 +373,13 @@ pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, proxy: E
 
     if app.borrow().webview.is_none() {
         if !hide_window {
+            #[cfg(target_os = "linux")]
+            {
+                std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+                std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+            }
+
             let webview = WebViewBuilder::new()
                 .with_url("http://127.0.0.1:5923")
                 .with_devtools(true)

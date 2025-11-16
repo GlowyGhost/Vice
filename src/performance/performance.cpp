@@ -1,20 +1,21 @@
 #include <cstdint>
+#include <string>
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
+#include <tlhelp32.h>
 #include <psapi.h>
 #else
 #include <fstream>
 #include <thread>
 #include <chrono>
-#include <string>
 #include <unistd.h>
+#include <sstream>
 #endif
 
 #ifdef _WIN32
 static FILETIME prevIdleTime = {0}, prevKernelTime = {0}, prevUserTime = {0}, prevProcKernel = {0}, prevProcUser = {0}, prevSysKernel = {0}, prevSysUser = {0};
-#endif
-
-#ifdef __linux__
+#else
 struct CPUData {
     unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
 };
@@ -129,12 +130,12 @@ extern "C" {
         float cpuUsage = (static_cast<float>(procTotal) / static_cast<float>(sysTotal)) * 100.0f * numCPUs;
         return cpuUsage;
         #else
-        CPUData sys1 = ReadSystemCPU();
+        CPUData sys1 = ReadCPUData();
         unsigned long long proc1 = ReadProcessCPU();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        CPUData sys2 = ReadSystemCPU();
+        CPUData sys2 = ReadCPUData();
         unsigned long long proc2 = ReadProcessCPU();
 
         unsigned long long sysIdle1 = sys1.idle + sys1.iowait;
@@ -183,17 +184,50 @@ extern "C" {
     #pragma region Get App RAM
     uint64_t get_app_ram() {
         #ifdef _WIN32
+        uint64_t totalRam = 0;
+        DWORD myPid = GetCurrentProcessId();
+
         PROCESS_MEMORY_COUNTERS_EX pmc;
-        GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-        return pmc.WorkingSetSize / (1024 * 1024);
+        if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+            totalRam += pmc.WorkingSetSize;
+        }
+
+        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnap == INVALID_HANDLE_VALUE) return totalRam / (1024 * 1024);
+
+        PROCESSENTRY32 pe;
+        pe.dwSize = sizeof(PROCESSENTRY32);
+
+        if (Process32First(hSnap, &pe)) {
+            do {
+                if (pe.th32ParentProcessID == myPid) {
+                    std::wstring procName = pe.szExeFile;
+                    if (procName.find(L"WebView2") != std::wstring::npos || procName.find(L"msedgewebview2.exe") != std::wstring::npos) {
+                        HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+                        if (hProc) {
+                            PROCESS_MEMORY_COUNTERS_EX childPmc;
+                            if (GetProcessMemoryInfo(hProc, (PROCESS_MEMORY_COUNTERS*)&childPmc, sizeof(childPmc))) {
+                                totalRam += childPmc.WorkingSetSize;
+                            }
+                            CloseHandle(hProc);
+                        }
+                    }
+                }
+            } while (Process32Next(hSnap, &pe));
+        }
+
+        CloseHandle(hSnap);
+        return totalRam / (1024 * 1024);
         #else
+        uint64_t totalRam = 0;
+
         std::ifstream status("/proc/self/status");
         std::string line;
         while (std::getline(status, line)) {
             if (line.rfind("VmRSS:", 0) == 0)
-                return ParseLineValueKB(line) / 1024;
+                totalRam += ParseLineValueKB(line) / 1024;
         }
-        return 0;
+        return totalRam;
         #endif
     }
     #pragma endregion
