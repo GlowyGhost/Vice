@@ -1,56 +1,15 @@
 #include <cstdint>
 #include <string>
-#ifdef _WIN32
 #include <windows.h>
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <psapi.h>
-#else
-#include <fstream>
-#include <thread>
-#include <chrono>
-#include <unistd.h>
-#include <sstream>
-#endif
 
-#ifdef _WIN32
 static FILETIME prevIdleTime = {0}, prevKernelTime = {0}, prevUserTime = {0}, prevProcKernel = {0}, prevProcUser = {0}, prevSysKernel = {0}, prevSysUser = {0};
-#else
-struct CPUData {
-    unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
-};
-
-CPUData ReadCPUData() {
-    std::ifstream file("/proc/stat");
-    std::string cpu;
-    CPUData data{};
-    file >> cpu >> data.user >> data.nice >> data.system >> data.idle
-        >> data.iowait >> data.irq >> data.softirq >> data.steal;
-    return data;
-}
-
-unsigned long long ReadProcessCPU() {
-    std::ifstream file("/proc/self/stat");
-    std::string dummy;
-    unsigned long long utime, stime;
-    for (int i = 0; i < 13; ++i) file >> dummy;
-    file >> utime >> stime;
-    return utime + stime;
-}
-
-uint64_t ParseLineValueKB(const std::string& line) {
-    std::istringstream iss(line);
-    std::string key, unit;
-    uint64_t value;
-    iss >> key >> value >> unit;
-    return value;
-}
-#endif
 
 extern "C" {
     #pragma region Get Sys CPU
     float get_sys_cpu() {
-        #ifdef _WIN32
         FILETIME idleTime, kernelTime, userTime;
         if (!GetSystemTimes(&idleTime, &kernelTime, &userTime))
             return -1.0f;
@@ -71,30 +30,10 @@ extern "C" {
         prevUserTime = userTime;
 
         return cpu;
-        #else
-        CPUData t1 = ReadCPUData();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        CPUData t2 = ReadCPUData();
-
-        unsigned long long idle1 = t1.idle + t1.iowait;
-        unsigned long long idle2 = t2.idle + t2.iowait;
-
-        unsigned long long nonIdle1 = t1.user + t1.nice + t1.system + t1.irq + t1.softirq + t1.steal;
-        unsigned long long nonIdle2 = t2.user + t2.nice + t2.system + t2.irq + t2.softirq + t2.steal;
-
-        unsigned long long total1 = idle1 + nonIdle1;
-        unsigned long long total2 = idle2 + nonIdle2;
-
-        float totalDiff = static_cast<float>(total2 - total1);
-        float idleDiff = static_cast<float>(idle2 - idle1);
-
-        return (totalDiff > 0.0f) ? ((totalDiff - idleDiff) / totalDiff) * 100.0f : 0.0f;
-        #endif
     }
     #pragma endregion
     #pragma region Get App CPU
     float get_app_cpu() {
-        #ifdef _WIN32
         FILETIME sysIdle, sysKernel, sysUser;
         FILETIME procCreation, procExit, procKernel, procUser;
 
@@ -129,35 +68,10 @@ extern "C" {
 
         float cpuUsage = (static_cast<float>(procTotal) / static_cast<float>(sysTotal)) * 100.0f * numCPUs;
         return cpuUsage;
-        #else
-        CPUData sys1 = ReadCPUData();
-        unsigned long long proc1 = ReadProcessCPU();
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-        CPUData sys2 = ReadCPUData();
-        unsigned long long proc2 = ReadProcessCPU();
-
-        unsigned long long sysIdle1 = sys1.idle + sys1.iowait;
-        unsigned long long sysIdle2 = sys2.idle + sys2.iowait;
-
-        unsigned long long sysNonIdle1 = sys1.user + sys1.nice + sys1.system + sys1.irq + sys1.softirq + sys1.steal;
-        unsigned long long sysNonIdle2 = sys2.user + sys2.nice + sys2.system + sys2.irq + sys2.softirq + sys2.steal;
-
-        unsigned long long sysTotal1 = sysIdle1 + sysNonIdle1;
-        unsigned long long sysTotal2 = sysIdle2 + sysNonIdle2;
-
-        unsigned long long sysTotalDiff = sysTotal2 - sysTotal1;
-        unsigned long long procDiff = proc2 - proc1;
-
-        long numCPUs = sysconf(_SC_NPROCESSORS_ONLN);
-        return (sysTotalDiff > 0) ? (procDiff * 100.0f / sysTotalDiff) * numCPUs : 0.0f;
-        #endif
     }
     #pragma endregion
     #pragma region Get Sys RAM
     uint64_t get_sys_ram() {
-        #ifdef _WIN32
         MEMORYSTATUSEX status;
         status.dwLength = sizeof(status);
         GlobalMemoryStatusEx(&status);
@@ -165,25 +79,10 @@ extern "C" {
         uint64_t total = status.ullTotalPhys;
         uint64_t avail = status.ullAvailPhys;
         return (total - avail) / (1024 * 1024);
-        #else
-        std::ifstream meminfo("/proc/meminfo");
-        std::string line;
-        uint64_t totalKB = 0, availKB = 0;
-        while (std::getline(meminfo, line)) {
-            if (line.rfind("MemTotal:", 0) == 0)
-                totalKB = ParseLineValueKB(line);
-            else if (line.rfind("MemAvailable:", 0) == 0)
-                availKB = ParseLineValueKB(line);
-            if (totalKB && availKB)
-                break;
-        }
-        return (totalKB - availKB) / 1024;
-        #endif
     }
     #pragma endregion
     #pragma region Get App RAM
     uint64_t get_app_ram() {
-        #ifdef _WIN32
         uint64_t totalRam = 0;
         DWORD myPid = GetCurrentProcessId();
 
@@ -201,8 +100,8 @@ extern "C" {
         if (Process32First(hSnap, &pe)) {
             do {
                 if (pe.th32ParentProcessID == myPid) {
-                    std::wstring procName = pe.szExeFile;
-                    if (procName.find(L"WebView2") != std::wstring::npos || procName.find(L"msedgewebview2.exe") != std::wstring::npos) {
+                    std::string procName = pe.szExeFile;
+                    if (procName.find("WebView2") != std::string::npos || procName.find("msedgewebview2.exe") != std::string::npos) {
                         HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
                         if (hProc) {
                             PROCESS_MEMORY_COUNTERS_EX childPmc;
@@ -218,35 +117,14 @@ extern "C" {
 
         CloseHandle(hSnap);
         return totalRam / (1024 * 1024);
-        #else
-        uint64_t totalRam = 0;
-
-        std::ifstream status("/proc/self/status");
-        std::string line;
-        while (std::getline(status, line)) {
-            if (line.rfind("VmRSS:", 0) == 0)
-                totalRam += ParseLineValueKB(line) / 1024;
-        }
-        return totalRam;
-        #endif
     }
     #pragma endregion
     #pragma region Get Total RAM
     uint64_t get_total_ram() {
-        #ifdef _WIN32
         MEMORYSTATUSEX status;
         status.dwLength = sizeof(status);
         GlobalMemoryStatusEx(&status);
         return status.ullTotalPhys / (1024 * 1024);
-        #else
-        std::ifstream meminfo("/proc/meminfo");
-        std::string line;
-        while (std::getline(meminfo, line)) {
-            if (line.rfind("MemTotal:", 0) == 0)
-                return ParseLineValueKB(line) / 1024;
-        }
-        return 0;
-        #endif
     }
     #pragma endregion
 }

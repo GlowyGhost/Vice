@@ -74,10 +74,7 @@ pub(crate) fn delete_sound(name: String) -> Result<(), String> {
 }
 
 pub(crate) fn pick_menu_sound() -> Option<String> {
-    #[cfg(target_os = "windows")]
     let formats: [&str; 6] = ["wav", "mp3", "wma", "aac", "m4a", "flac"];
-    #[cfg(target_os = "linux")]
-    let formats: [&str; 11] = ["wav", "mp3", "wma", "aac", "m4a", "flac", "ogg", "opus", "alac", "aiff", "aif"];
 
     if let Some(path) = rfd::FileDialog::new()
         .add_filter("Sound Files", &formats)

@@ -54,17 +54,10 @@ impl Default for Settings {
     }
 }
 
-#[cfg(target_os = "windows")]
 const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater.exe");
 
-#[cfg(target_os = "linux")]
-const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater");
-
 fn app_base() -> PathBuf {
-    #[cfg(target_os = "windows")]
     let base = env::var("APPDATA");
-    #[cfg(target_os = "linux")]
-    let base = env::var("XDG_DATA_HOME");
 
     match base {
         Ok(s) => return PathBuf::from(s).join("Vice"),
@@ -364,10 +357,7 @@ pub(crate) fn save_settings(settings: Settings) -> Result<(), String> {
 pub(crate) fn extract_updater(arg: &str, path: PathBuf, debug: &str) -> Result<String, String> {
     let mut temp_path = env::temp_dir();
 
-    #[cfg(target_os = "windows")]
     let filename = "Vice-Uninstaller-".to_string()+&Uuid::new_v4().to_string()+".exe";
-    #[cfg(any(target_os = "linux"))]
-    let filename = "Vice-Uninstaller-".to_string()+&Uuid::new_v4().to_string();
 
     temp_path.push(&filename);
 

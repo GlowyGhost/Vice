@@ -28,7 +28,6 @@ extern "C" {
 static RUN_MONITOR: AtomicBool = AtomicBool::new(true);
 static PERFORMANCE: Lazy<Mutex<Data>> = Lazy::new(|| Mutex::new(Data::default()));
 
-
 fn run_loop() {
     println!("Starting performance monitor loop");
     loop {

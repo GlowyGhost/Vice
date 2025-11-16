@@ -236,74 +236,37 @@ fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
 }
 
 pub fn create_icon() -> Option<(Vec<u8>, u32, u32)> {
-    #[cfg(target_os = "windows")]
-    {
-        let reader = Cursor::new(ICON);
-        let icon_dir = match ico::IconDir::read(reader) {
-            Ok(i) => i,
-            Err(e) => {
-                println!("Error occured when getting ico: {:#?}", e);
-                return None;
-            }
-        };
+    let reader = Cursor::new(ICON);
+    let icon_dir = match ico::IconDir::read(reader) {
+        Ok(i) => i,
+        Err(e) => {
+            println!("Error occured when getting ico: {:#?}", e);
+            return None;
+        }
+    };
 
-        let entry = icon_dir
-            .entries()
-            .iter()
-            .max_by_key(|e| e.width());
+    let entry = icon_dir
+        .entries()
+        .iter()
+        .max_by_key(|e| e.width());
         
-        let image = match entry {
-            Some(i) => i,
-            None => {
-                println!("Failed to get an entry in ico");
-                return None;
-            }
-        };
+    let image = match entry {
+        Some(i) => i,
+        None => {
+            println!("Failed to get an entry in ico");
+            return None;
+        }
+    };
 
-        match image.decode() {
-            Ok(i) => {
-                return Some((i.rgba_data().to_vec(), i.width(), i.height()));
-            }
-            Err(e) => {
-                println!("Failed to decode icon: {:#?}", e);
-                return None;
-            }
-        };
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let reader = Cursor::new(ICON);
-
-        let decoder = png::Decoder::new(reader);
-        let mut decode = match decoder.read_info() {
-            Ok(r) => r,
-            Err(e) => {
-                println!("Failed to read PNG: {:#?}", e);
-                return None;
-            }
-        };
-
-        let buffer_size = match decode.output_buffer_size() {
-            Some(sz) => sz,
-            None => {
-                println!("Could not determine PNG output buffer size");
-                return None;
-            }
-        };
-
-        let mut buf = vec![0; buffer_size];
-        let info = match decode.next_frame(&mut buf) {
-            Ok(info) => info,
-            Err(e) => {
-                println!("Failed to decode PNG: {:#?}", e);
-                return None;
-            }
-        };
-
-        buf.truncate(info.buffer_size());
-        Some((buf, info.width, info.height))
-    }
+    match image.decode() {
+        Ok(i) => {
+            return Some((i.rgba_data().to_vec(), i.width(), i.height()));
+        }
+        Err(e) => {
+            println!("Failed to decode icon: {:#?}", e);
+            return None;
+        }
+    };
 }
 
 pub fn run_server(ready_tx: &std::sync::mpsc::Sender<()>, proxy: EventLoopProxy<ServerCommand>) {
@@ -373,13 +336,6 @@ pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, proxy: E
 
     if app.borrow().webview.is_none() {
         if !hide_window {
-            #[cfg(target_os = "linux")]
-            {
-                std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-                std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
-            }
-
             let webview = WebViewBuilder::new()
                 .with_url("http://127.0.0.1:5923")
                 .with_devtools(true)

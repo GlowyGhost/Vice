@@ -70,75 +70,33 @@ fn delete_file(path: String) -> Result<(), Box<dyn std::error::Error>> {
     return Ok(fs::remove_file(file_path)?);
 }
 fn is_executable(path: &Path) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        path.extension()
-            .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        match fs::metadata(path) {
-            Ok(metadata) => {
-                let permissions = metadata.permissions();
-                permissions.mode() & 0o111 != 0
-            }
-            Err(_) => false,
-        }
-    }
+    path.extension()
+        .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
 }
 fn close_vice(path: String) -> Result<(), Box<dyn std::error::Error>> {
-    let mut res = false;
+    let process_name = Path::new(&path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&path);
 
-    #[cfg(target_os = "windows")]
-    {
-        let process_name = Path::new(&path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&path);
+    let output = Command::new("tasklist")
+        .arg("/FI")
+        .arg(format!("IMAGENAME eq {}", process_name))
+        .output()?;
 
-        let output = Command::new("tasklist")
-            .arg("/FI")
-            .arg(format!("IMAGENAME eq {}", process_name))
-            .output()?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        res = stdout.contains(process_name);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if stdout.contains(process_name) {
+        return Ok(());
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        let status = Command::new("pgrep")
-            .arg("-f")
-            .arg(&path)
-            .status()?;
+    let process_name = Path::new(&path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&path);
 
-        res = status.success();
-    }
-
-    if res {
-        #[cfg(target_os = "windows")]
-        {
-            let process_name = Path::new(&path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(&path);
-
-            let _ = Command::new("taskkill")
-                .args(["/F", "/T", "/IM", process_name])
-                .output();
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            let _ = Command::new("pkill")
-                .arg("-9")
-                .arg("-f")
-                .arg(&path)
-                .output();
-        }
-    }
+    let _ = Command::new("taskkill")
+        .args(["/F", "/T", "/IM", process_name])
+        .output();
 
     Ok(())
 }
@@ -163,11 +121,7 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
         .send()?
         .json()?;
 
-    #[cfg(target_os = "windows")]
     let target_asset = release.assets.iter().find(|a| a.name.ends_with("windows.zip"));
-
-    #[cfg(target_os = "linux")]
-    let target_asset = release.assets.iter().find(|a| a.name.ends_with("linux.zip"));
 
     let target_asset = match target_asset {
         Some(asset) => asset,
@@ -194,10 +148,7 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
     }
     fs::create_dir_all(extract_dir)?;
 
-    #[cfg(target_os = "windows")]
     let expected_name = if debug == "false" { "Vice.exe" } else { "Vice-debug.exe" };
-    #[cfg(any(target_os = "linux"))]
-    let expected_name = if debug == "false" { "Vice" } else { "Vice-debug" };
 
     let mut found = false;
 
@@ -283,11 +234,7 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
     print!("\rWaiting for Unlock...");
     stdout().flush()?;
 
-    #[cfg(target_os = "windows")]
     let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
-
-    #[cfg(target_os = "linux")]
-    let path_save = std::env::var("HOME").unwrap_or_default() + "/.local/share/Vice";
 
     loop {
         if is_folder_unlocked(path_save.clone()) {
@@ -328,20 +275,11 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
     stdout().flush()?;
 
     print!("Opening new version...");
-    #[cfg(target_os = "windows")]
-    {
-        let escaped = old_path.replace("&", "^&");
+    let escaped = old_path.replace("&", "^&");
 
-        let _ = Command::new("cmd")
-            .args(["/C", "start", "", &escaped])
-            .spawn();
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = Command::new(&old_path)
-            .spawn();
-    }
+    let _ = Command::new("cmd")
+        .args(["/C", "start", "", &escaped])
+        .spawn();
 
     print!("\rOpened new version...      ");
     stdout().flush()?;
@@ -433,11 +371,7 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
     print!("\rWaiting for Unlock...");
     stdout().flush()?;
 
-    #[cfg(target_os = "windows")]
     let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
-
-    #[cfg(target_os = "linux")]
-    let path_save = std::env::var("HOME").unwrap_or_default() + "/.local/share/Vice";
 
     loop {
         if is_folder_unlocked(path_save.clone()) {

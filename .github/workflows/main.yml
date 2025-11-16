@@ -29,14 +29,10 @@ jobs:
         with:
           name: flutter-build
           path: flutter/build/web
-  
+
   updater:
     name: Build updater
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    
+    runs-on: windows-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -52,28 +48,15 @@ jobs:
           cd updater
           cargo build -r
 
-      - name: Upload updater (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Upload updater
         uses: actions/upload-artifact@v4
         with:
-          name: updater-${{ matrix.os }}
+          name: updater
           path: updater/target/release/updater.exe
-
-      - name: Upload updater (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: updater-${{ matrix.os }}
-          path: updater/target/release/updater
   
   debug:
     name: Build Debug App
-    runs-on: ${{ matrix.os }}
-    needs: [flutter, updater]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    
+    runs-on: windows-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -88,53 +71,19 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            libglib2.0-dev \
-            libwebkit2gtk-4.1-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-bad1.0-dev \
-            pkg-config \
-            libxdo-dev
-
       - name: Download Flutter build
         uses: actions/download-artifact@v4
         with:
           name: flutter-build
           path: flutter/build/web
 
-      - name: Install frontend deps if package.json exists
-        shell: bash
-        run: |
-          if [ -f package.json ]; then
-            npm install
-          else
-            echo "No package.json found, skipping npm install"
-          fi
-
-      - name: Get Console Icons (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Get Console Icons
         shell: pwsh
         run: |
           ren icons icons-release
           ren icons-console icons
 
-      - name: Install C++ compiler (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: sudo apt update && sudo apt install -y build-essential
-
-      - name: Install C++ compiler (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Install C++ compiler
         shell: pwsh
         run: |
           choco install mingw -y
@@ -143,7 +92,7 @@ jobs:
       - name: Download Updater
         uses: actions/download-artifact@v4
         with:
-          name: updater-${{ matrix.os }}
+          name: updater-windows
           path: updater/target/release
 
       - name: Build Tauri app
@@ -151,42 +100,27 @@ jobs:
         run: |
           cargo build
 
-      - name: Rename Files (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Rename Files
         shell: pwsh
         run: |
           cd target/debug
           Rename-Item -Path Vice.exe -NewName Vice-debug.exe
 
-      - name: Rename Files (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Rename Files
         shell: bash
         run: |
           cd target/debug
           mv Vice Vice-debug
 
-      - name: Upload debug build (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Upload debug build
         uses: actions/upload-artifact@v4
         with:
-          name: debug-${{ matrix.os }}
+          name: debug-windows
           path: target/debug/Vice-debug.exe
-
-      - name: Upload debug build (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-${{ matrix.os }}
-          path: target/debug/Vice-debug
 
   app:
     name: Build Tauri App
-    runs-on: ${{ matrix.os }}
-    needs: [flutter, updater]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+    runs-on: windows-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -201,46 +135,13 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            libglib2.0-dev \
-            libwebkit2gtk-4.1-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-good1.0-dev \
-            libgstreamer-plugins-bad1.0-dev \
-            pkg-config \
-            libxdo-dev
-
       - name: Download Flutter build
         uses: actions/download-artifact@v4
         with:
           name: flutter-build
           path: flutter/build/web
 
-      - name: Install frontend deps if package.json exists
-        shell: bash
-        run: |
-          if [ -f package.json ]; then
-            npm install
-          else
-            echo "No package.json found, skipping npm install"
-          fi
-
-      - name: Install C++ compiler (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: sudo apt update && sudo apt install -y build-essential
-
-      - name: Install C++ compiler (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Install C++ compiler
         shell: pwsh
         run: |
           choco install mingw -y
@@ -249,7 +150,7 @@ jobs:
       - name: Download Updater
         uses: actions/download-artifact@v4
         with:
-          name: updater-${{ matrix.os }}
+          name: updater-windows
           path: updater/target/release
 
       - name: Build Tauri app
@@ -257,74 +158,32 @@ jobs:
         run: |
           cargo build --release
 
-      - name: Upload release build (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Upload release build
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.os }}
+          name: release-windows
           path: target/release/Vice.exe
-        
-      - name: Upload release build (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.os }}
-          path: target/release/Vice
 
   zip:
     name: Zip Artifacts
-    runs-on: ${{ matrix.os }}
-    needs: [debug, app]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+    runs-on: windows-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
-      - name: Install Linux dependencies for Tauri
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            zip
           
       - name: Download Debug
         uses: actions/download-artifact@v4
         with:
-          name: debug-${{ matrix.os }}
+          name: debug-windows
           path: temp
 
       - name: Download Release
         uses: actions/download-artifact@v4
         with:
-          name: release-${{ matrix.os }}
+          name: release-windows
           path: temp
 
-      - name: Rename Installation File (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          cd docs
-          mv Installation-Linux.md Installation.md
-
-      - name: Rename Installation File (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          cd docs
-          Rename-Item -Path Installation-Windows.md -NewName Installation.md
-
-      - name: Package Release Zip (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          cd temp
-          zip -j linux.zip Vice Vice-debug ../LICENSE ../docs/Installation.md
-
-      - name: Package Release Zip (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Package Release Zip
         shell: pwsh
         run: |
           cd temp
@@ -333,5 +192,5 @@ jobs:
       - name: Upload final zip
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}
+          name: windows
           path: temp/*.zip
