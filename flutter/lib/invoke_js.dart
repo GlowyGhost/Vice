@@ -35,7 +35,7 @@ Future<dynamic> invokeJS(String cmd, [Map<String, dynamic>? args]) {
 void initIpcListener() {
   html.window.onMessage.listen(_handleMessage);
 
-  html.window.addEventListener('message', (event) {
+  html.window.addEventListener("message", (event) {
     if (event is html.MessageEvent) _handleMessage(event);
   });
 }
@@ -61,7 +61,6 @@ void _handleMessage(html.MessageEvent event) {
 
         if (map.containsKey("name") ||
           map.containsKey("icon") ||
-          map.containsKey("sound") ||
           map.containsKey("device") ||
           map.containsKey("color") ||
           map.containsKey("lowlatency")) {
@@ -118,7 +117,6 @@ Future<void> printText(String? text) async {
 class SFXsChannels {
   final String? name;
   final String? icon;
-  final String? sound;
   final String? device;
   final List<int>? color;
   final bool? deviceOrApp;
@@ -128,7 +126,6 @@ class SFXsChannels {
   SFXsChannels({
     this.name,
     this.icon,
-    this.sound,
     this.device,
     this.color,
     this.deviceOrApp,
@@ -145,7 +142,6 @@ class SFXsChannels {
     return SFXsChannels(
       name: map["name"],
       icon: map["icon"],
-      sound: map["sound"],
       device: map["device"],
       color: parsedColor,
       deviceOrApp: map["deviceorapp"],
@@ -200,35 +196,35 @@ void _sendToHost(dynamic payload) {
               return jsonEncode(simple);
             }
           } catch (_) {}
-          return '{}';
+          return "{}";
         }
       })();
 
-      if (hasProperty(html.window, 'external') && hasProperty(getProperty(html.window, 'external'), 'invoke')) {
-        final external = getProperty(html.window, 'external');
-        callMethod(external, 'invoke', [jsonPayload]);
+      if (hasProperty(html.window, "external") && hasProperty(getProperty(html.window, "external"), "invoke")) {
+        final external = getProperty(html.window, "external");
+        callMethod(external, "invoke", [jsonPayload]);
 
         return;
       }
 
-      if (hasProperty(html.window, 'chrome')) {
-        final chrome = getProperty(html.window, 'chrome');
-        if (hasProperty(chrome, 'webview')) {
-          final webview = getProperty(chrome, 'webview');
-          callMethod(webview, 'postMessage', [jsonPayload]);
+      if (hasProperty(html.window, "chrome")) {
+        final chrome = getProperty(html.window, "chrome");
+        if (hasProperty(chrome, "webview")) {
+          final webview = getProperty(chrome, "webview");
+          callMethod(webview, "postMessage", [jsonPayload]);
 
           return;
         }
       }
 
-    if (hasProperty(html.window, 'ipc') && hasProperty(getProperty(html.window, 'ipc'), 'postMessage')) {
-      final ipc = getProperty(html.window, 'ipc');
-      callMethod(ipc, 'postMessage', [payload]);
+    if (hasProperty(html.window, "ipc") && hasProperty(getProperty(html.window, "ipc"), "postMessage")) {
+      final ipc = getProperty(html.window, "ipc");
+      callMethod(ipc, "postMessage", [payload]);
 
       return;
     }
-    html.window.postMessage(payload, '*');
+    html.window.postMessage(payload, "*");
   } catch (e) {
-    print('IPC send failed: $e');
+    print("IPC send failed: $e");
   }
 }

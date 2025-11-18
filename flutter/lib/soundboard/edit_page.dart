@@ -9,14 +9,12 @@ class SoundboardEdit extends StatefulWidget {
   final String name;
   final String icon;
   final List<int> color;
-  final String sound;
   final bool lowlatency;
 
   const SoundboardEdit({
     super.key,
     required this.name,
     required this.icon,
-    required this.sound,
     required this.color,
     required this.lowlatency,
   });
@@ -30,7 +28,6 @@ class _SoundboardEditState extends State<SoundboardEdit> {
   Color currentColor = Color(0xFFFF0000);
   String icon = "question_mark";
   final TextEditingController controllerName = TextEditingController();
-  final TextEditingController controllerSound = TextEditingController();
   final ScrollController scrollController = ScrollController();
   bool lowlatency = false;
   
@@ -38,7 +35,6 @@ class _SoundboardEditState extends State<SoundboardEdit> {
   void initState() {
     super.initState();
 
-    controllerSound.text = widget.sound;
     icon = widget.icon;
     pickerColor = Color.fromARGB(255, widget.color[0], widget.color[1], widget.color[2]);
     currentColor = Color.fromARGB(255, widget.color[0], widget.color[1], widget.color[2]);
@@ -55,7 +51,6 @@ class _SoundboardEditState extends State<SoundboardEdit> {
       "color": [currentColor.r*255.toInt(), currentColor.g*255.toInt(), currentColor.b*255.toInt()],
       "icon": icon,
       "name": controllerName.text,
-      "sound": controllerSound.text,
       "oldname": widget.name,
       "low": lowlatency
     });
@@ -141,6 +136,9 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                       style: TextStyle(color: text),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accent),
+                        ),
                         labelText: "Enter name",
                         labelStyle: TextStyle(color: accent),
                         filled: true,
@@ -175,43 +173,16 @@ class _SoundboardEditState extends State<SoundboardEdit> {
                   const SizedBox(width: 35),
 
                   Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controllerSound,
-                            style: TextStyle(color: text),
-                            decoration: InputDecoration(
-                              border: const OutlineInputBorder(),
-                              labelText: "Enter Sound Effect",
-                              labelStyle: TextStyle(color: accent),
-                              filled: true,
-                              fillColor: accent,
-                            ),
-                          )
-                        ),
-
-                        const SizedBox(width: 16),
-
-                        IconButton(
-                          onPressed: () async => {controllerSound.text = await invokeJS("pick_menu_sound")},
-                          icon: Icon(Icons.menu, color: text, size: 96)
-                        )
-                      ],
-                    )
-                  ),
+                    child: SwitchListTile(
+                      title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: text)),
+                      value: lowlatency,
+                      activeColor: accent,
+                      onChanged: (value) {
+                        setState(() => lowlatency = value);
+                      },
+                    ),
+                  )
                 ],
-              ),
-
-              const SizedBox(height: 20),
-
-              SwitchListTile(
-                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: text)),
-                value: lowlatency,
-                activeColor: accent,
-                onChanged: (value) {
-                  setState(() => lowlatency = value);
-                },
               ),
             ],
           ),

@@ -161,6 +161,9 @@ class _ChannelsEditState extends State<ChannelsEdit> {
                       style: TextStyle(color: text),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accent),
+                        ),
                         labelText: "Enter name",
                         labelStyle: TextStyle(color: accent),
                         filled: true,

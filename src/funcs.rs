@@ -1,11 +1,13 @@
-use std::net::TcpStream;
-use std::time::Duration;
+use std::path::Path;
+use std::{net::TcpStream, time::Duration, fs};
 use rfd::{MessageDialog, MessageDialogResult};
 use serde::Deserialize;
 
 use crate::files::{self, Channel, Settings, SoundboardSFX};
 use crate::audio::{self};
 use crate::performance;
+
+static SFX_EXTENTIONS: [&str; 6] = ["wav", "mp3", "wma", "aac", "m4a", "flac"];
 
 pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps: String, device: bool, low: bool) -> Result<(), String> {
     let channel: Channel = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
@@ -16,8 +18,25 @@ pub(crate) fn new_channel(color: [u8; 3], icon: String, name: String, deviceapps
 }
 
 pub(crate) fn new_sound(color: [u8; 3], icon: String, name: String, sound: String, low: bool) -> Result<(), String> {
-    let sfx: SoundboardSFX = SoundboardSFX{name, icon, color, sound, lowlatency: low};
     let mut sfxs: Vec<SoundboardSFX> = files::get_soundboard();
+    
+    let ext = Path::new(&sound)
+        .extension();
+
+    match ext {
+        None => {
+            eprintln!("Failed to get extnetion for soundeffect \"{}\"", name);
+            return Err(format!("Failed to get extnetion for soundeffect \"{}\"", name));
+        }
+        Some(o) => {
+            if let Err(e) = fs::copy(&sound, files::sfx_base().join(format!("{}.{}", name, o.to_str().unwrap_or("wav")).to_string())) {
+                eprintln!("Failed to copy soundeffect for soundeffect \"{}\": {:#?}", name, e);
+                return Err(format!("Failed to copy soundeffect for soundeffect \"{}\"", name));
+            }
+        }
+    }
+
+    let sfx: SoundboardSFX = SoundboardSFX{name, icon, color, lowlatency: low};
 
     sfxs.push(sfx);
     return files::save_soundboard(sfxs);
@@ -29,21 +48,21 @@ pub(crate) fn edit_channel(color: [u8; 3], icon: String, name: String, deviceapp
     if let Some(pos) = channels.iter().position(|c: &Channel| c.name == oldname) {
         channels[pos] = Channel{name, icon, color, device: deviceapps, deviceorapp: device, lowlatency: low, volume: 1.0};
     } else {
-        eprintln!("Channel '{}' not found", oldname);
-        return Err(format!("Channel '{}' not found", oldname));
+        eprintln!("Channel \"{}\" not found", oldname);
+        return Err(format!("Channel \"{}\" not found", oldname));
     }
     
     return files::save_channels(channels).map(|_| audio::restart());
 }
 
-pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, sound: String, oldname: String, low: bool) -> Result<(), String> {
+pub(crate) fn edit_soundboard(color: [u8; 3], icon: String, name: String, oldname: String, low: bool) -> Result<(), String> {
     let mut sfxs: Vec<SoundboardSFX> = files::get_soundboard();
 
     if let Some(pos) = sfxs.iter().position(|c: &SoundboardSFX| c.name == oldname) {
-        sfxs[pos] = SoundboardSFX{name, icon, color, sound, lowlatency: low};
+        sfxs[pos] = SoundboardSFX{name, icon, color, lowlatency: low};
     } else {
-        eprintln!("Soundeffect '{}' not found", oldname);
-        return Err(format!("Soundeffect '{}' not found", oldname));
+        eprintln!("Soundeffect \"{}\" not found", oldname);
+        return Err(format!("Soundeffect \"{}\" not found", oldname));
     }
     
     return files::save_soundboard(sfxs);
@@ -55,7 +74,8 @@ pub(crate) fn delete_channel(name: String) -> Result<(), String> {
     if let Some(pos) = channels.iter().position(|c| c.name == name) {
         channels.remove(pos);
     } else {
-        return Err(format!("Channel '{}' not found", name));
+        eprintln!("Channel \"{}\" not found", name);
+        return Err(format!("Channel \"{}\" not found", name));
     }
     
     return files::save_channels(channels).map(|_| audio::restart());
@@ -67,17 +87,31 @@ pub(crate) fn delete_sound(name: String) -> Result<(), String> {
     if let Some(pos) = sfxs.iter().position(|c: &SoundboardSFX| c.name == name) {
         sfxs.remove(pos);
     } else {
-        return Err(format!("Soundeffect '{}' not found", name));
+        eprintln!("Soundeffect \"{}\" not found", name);
+        return Err(format!("Soundeffect \"{}\" not found", name));
+    }
+
+    let mut deleted = false;
+    for ext in SFX_EXTENTIONS {
+        let filename = format!("{}.{}", files::sfx_base().join(&name).to_str().unwrap_or(&name), ext);
+        if fs::metadata(&filename).is_ok() {
+            fs::remove_file(&filename)
+                .map_err(|e| format!("Failed to delete file: {}", e))?;
+            deleted = true;
+            break;
+        }
+    }
+
+    if !deleted {
+        eprintln!("No file found for base name \"{}\"", name);
     }
     
     return files::save_soundboard(sfxs);
 }
 
 pub(crate) fn pick_menu_sound() -> Option<String> {
-    let formats: [&str; 6] = ["wav", "mp3", "wma", "aac", "m4a", "flac"];
-
     if let Some(path) = rfd::FileDialog::new()
-        .add_filter("Sound Files", &formats)
+        .add_filter("Sound Files", &SFX_EXTENTIONS)
         .pick_file()
     {
         Some(path.to_string_lossy().to_string())
@@ -127,7 +161,7 @@ pub(crate) fn set_volume(name: String, volume: f32) {
 
         audio::set_volume(channel.name, volume);
     } else {
-        eprintln!("Channel '{}' not found", name);
+        eprintln!("Channel \"{}\" not found", name);
         return;
     }
 
@@ -138,8 +172,22 @@ pub(crate) fn get_outputs() -> Vec<String> {
     audio::outputs()
 }
 
-pub(crate) fn play_sound(sound: String, low: bool) {
-    audio::play_sfx(&sound, low);
+pub(crate) fn play_sound(name: String, low: bool) {
+    let mut path: String = "".to_owned();
+    for ext in SFX_EXTENTIONS {
+        let filename = format!("{}.{}", files::sfx_base().join(&name).to_str().unwrap_or(&name), ext);
+        if fs::metadata(&filename).is_ok() {
+            path = filename;
+            break;
+        }
+    }
+
+    if path == "" {
+        eprintln!("Failed to get soundeffect file for soundeffect \"{}\"", name);
+        return;
+    }
+
+    audio::play_sfx(&path, low);
 }
 
 pub(crate) fn get_volume(name: String, get: bool, device: bool) -> String {

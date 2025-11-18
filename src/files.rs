@@ -11,7 +11,6 @@ pub(crate) struct SoundboardSFX {
     pub(crate) name: String,
     pub(crate) icon: String,
     pub(crate) color: [u8; 3],
-    pub(crate) sound: String,
     pub(crate) lowlatency: bool
 }
 
@@ -68,6 +67,18 @@ fn app_base() -> PathBuf {
     }
 }
 
+pub(crate) fn sfx_base() -> PathBuf {
+    let base = env::var("APPDATA");
+
+    match base {
+        Ok(s) => return PathBuf::from(s).join("Vice").join("SFXs"),
+        Err(e) => {
+            eprintln!("Error occured when getting SFXs Base: {:#?}", e);
+            return env::temp_dir().join("SFXs");
+        }
+    }
+}
+
 fn settings_json() -> PathBuf {
     app_base().join("settings.json")
 }
@@ -77,7 +88,7 @@ pub(crate) fn create_files() {
 
     if !base.exists() {
         if let Err(e) = fs::create_dir_all(base) {
-            println!("Failed to create app base: {e}");
+            eprintln!("Failed to create app base: {}", e);
         }
     }
 
@@ -90,12 +101,20 @@ pub(crate) fn create_files() {
         match serde_json::to_string_pretty(&default_file) {
             Ok(json) => {
                 if let Err(e) = fs::write(&file_path, json) {
-                    eprintln!("Failed to create settings: {e}");
+                    eprintln!("Failed to create settings: {}", e);
                 }
             }
             Err(e) => {
-                eprintln!("Failed to serialize default settings: {e}");
+                eprintln!("Failed to serialize default settings: {}", e);
             }
+        }
+    }
+
+    let sfxs_path: PathBuf = sfx_base();
+
+    if !sfxs_path.exists() {
+        if let Err(e) = fs::create_dir_all(sfxs_path) {
+            eprintln!("Failed to create soundeffect directory: {}", e);
         }
     }
 }
@@ -166,10 +185,6 @@ pub(crate) fn fix_soundeffect(broken: Value) -> SoundboardSFX {
         }
 
         sfx.color = color_array;
-    }
-
-    if let Some(sound) = broken.get("sound").and_then(|v| v.as_str()) {
-        sfx.sound = sound.to_string();
     }
 
     if let Some(lowlatency) = broken.get("lowlatency").and_then(|v| v.as_bool()) {

@@ -173,7 +173,7 @@ pub(crate) fn start() {
                     manage_app(channel.device, files::get_settings().output, channel.lowlatency, channel.name);
                 }
             }) {
-            eprintln!("Failed to spawn audio thread '{}': {}", thread_name, e);
+            eprintln!("Failed to spawn audio thread \"{}\": {}", thread_name, e);
         }
     }
 

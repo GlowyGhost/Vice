@@ -29,11 +29,9 @@ class _PerformancePageState extends State<PerformancePage> {
   @override
   void initState() {
     super.initState();
-    // schedule first init after first frame so the UI can paint quickly
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _init();
-      // ensure we don't create multiple timers accidentally
       _timer ??= Timer.periodic(const Duration(seconds: 5), (_) {
         if (!mounted) return;
         _init();
@@ -100,8 +98,8 @@ class _PerformancePageState extends State<PerformancePage> {
       }
 
       // basic validation
-      if (!dataMap.containsKey('system') || !dataMap.containsKey('app') || !dataMap.containsKey('general')) {
-        await printText('Invalid performance structure: missing keys');
+      if (!dataMap.containsKey("system") || !dataMap.containsKey("app") || !dataMap.containsKey("general")) {
+        await printText("Invalid performance structure: missing keys");
         if (!mounted) return;
         setState(() => data = null);
         return;
@@ -109,9 +107,9 @@ class _PerformancePageState extends State<PerformancePage> {
 
       // Safely build PerformanceData
       try {
-        final systemRaw = (dataMap['system'] as Map<String, dynamic>?) ?? <String, dynamic>{};
-        final appRaw = (dataMap['app'] as Map<String, dynamic>?) ?? <String, dynamic>{};
-        final generalRaw = (dataMap['general'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final systemRaw = (dataMap["system"] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final appRaw = (dataMap["app"] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final generalRaw = (dataMap["general"] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
         final system = <String, List<double>>{};
         systemRaw.forEach((k, v) {
@@ -151,13 +149,13 @@ class _PerformancePageState extends State<PerformancePage> {
         });
 
         // guaranteed minimal arrays for the charts
-        system['cpu'] ??= List<double>.filled(5, 0);
-        system['mem'] ??= List<double>.filled(5, 0);
-        app['cpu'] ??= List<double>.filled(5, 0);
-        app['ram'] ??= List<double>.filled(5, 0);
+        system["cpu"] ??= List<double>.filled(5, 0);
+        system["mem"] ??= List<double>.filled(5, 0);
+        app["cpu"] ??= List<double>.filled(5, 0);
+        app["ram"] ??= List<double>.filled(5, 0);
 
-        if ((general['ram'] ?? 0) <= 0) {
-          general['ram'] = 1;
+        if ((general["ram"] ?? 0) <= 0) {
+          general["ram"] = 1;
         }
 
         if (!mounted) return;

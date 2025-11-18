@@ -239,7 +239,7 @@ class SettingsData extends ChangeNotifier {
 	}
 
   Future<void> getVersion() async {
-    final version = await invokeJS('get_version');
+    final version = await invokeJS("get_version");
     settings.version = version;
   }
 

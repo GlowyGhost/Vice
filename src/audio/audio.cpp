@@ -711,10 +711,10 @@ extern "C" {
         PCMResult result = loadPCM(file);
         if (result.result != 0) {
             if (result.result == 1) {
-                std::cerr << "Failed to load " << file << ": Unrecognized file format\n";
+                std::cerr << "Failed to load \"" << file << "\": Unrecognized file format\n";
                 return;
             } else {
-                std::cerr << "Failed to load " << file << ": File doesn't exist or the file is in use\n";
+                std::cerr << "Failed to load \"" << file << "\": File doesn't exist or the file is in use\n";
                 return;
             }
         }
@@ -722,10 +722,10 @@ extern "C" {
         PCMData pcm = result.pcm;
         if (!pcm.buffer || pcm.channels <= 0) {
             if (!pcm.buffer) {
-                std::cerr << "Failed to load " << file << ": No audio data\n";
+                std::cerr << "Failed to load \"" << file << "\": No audio data\n";
                 return;
             } else {
-                std::cerr << "Failed to load " << file << ": No channels\n";
+                std::cerr << "Failed to load \"" << file << "\": No channels\n";
                 return;
             }
         }

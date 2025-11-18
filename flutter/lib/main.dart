@@ -10,13 +10,11 @@ import 'window.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Capture Flutter framework errors and forward them to the host.
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
-    printText('FlutterError: ${details.exception}\n${details.stack}');
+    printText("FlutterError: ${details.exception}\n${details.stack}");
   };
 
-  // Run app inside a guarded zone to capture uncaught Dart errors.
   runZonedGuarded(() async {
     initIpcListener();
 
@@ -36,7 +34,7 @@ void main() async {
       ),
     );
   }, (error, stack) {
-    printText('Unhandled error: $error\n$stack');
+    printText("Unhandled error: $error\n$stack");
   });
 }
 

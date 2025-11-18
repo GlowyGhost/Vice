@@ -16,10 +16,9 @@ class SFXClass {
   String name;
   String icon;
 	SFXColor color;
-  String sound;
   bool lowlatency;
 
-  SFXClass(this.name, this.icon, this.color, this.sound, this.lowlatency);
+  SFXClass(this.name, this.icon, this.color, this.lowlatency);
 }
 
 class SoundboardMain extends StatefulWidget {
@@ -48,7 +47,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
     List<SFXClass> covertedSFXS = [];
 
     for (final SFXsChannels sfx in sfxs) {
-			covertedSFXS.add(SFXClass(sfx.name!, sfx.icon!, SFXColor(sfx.color![0], sfx.color![1], sfx.color![2]), sfx.sound!, sfx.lowlatency!));
+			covertedSFXS.add(SFXClass(sfx.name!, sfx.icon!, SFXColor(sfx.color![0], sfx.color![1], sfx.color![2]), sfx.lowlatency!));
     }
     
     setState(() {
@@ -102,7 +101,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
 													),
 												),
 												onPressed: () async {
-													await invokeJS("play_sound", {"sound": sfx.sound, "low": sfx.lowlatency});
+													await invokeJS("play_sound", {"name": name, "low": sfx.lowlatency});
 												},
 												
 												child: Stack(
@@ -129,7 +128,7 @@ class _SoundboardMainState extends State<SoundboardMain> {
 															alignment: Alignment.bottomRight,
 															child: IconButton(
 																icon: Icon(Icons.more_vert, color: Colors.white, size: 32),
-																onPressed: () => {SoundboardPageClass.setPage(SoundboardEdit(name: name, icon: sfx.icon, color: [sfx.color.r, sfx.color.g, sfx.color.b], sound: sfx.sound, lowlatency: sfx.lowlatency))},
+																onPressed: () => {SoundboardPageClass.setPage(SoundboardEdit(name: name, icon: sfx.icon, color: [sfx.color.r, sfx.color.g, sfx.color.b], lowlatency: sfx.lowlatency))},
 															),
 														),
 													],

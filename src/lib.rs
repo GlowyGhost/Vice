@@ -125,19 +125,16 @@ fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
             }
             if let Some(icon) = args.get("icon").and_then(|v| v.as_str()) {
                 if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
-                    if let Some(sound) = args.get("sound").and_then(|v| v.as_str()) {
-                        if let Some(oldname) = args.get("oldname").and_then(|v| v.as_str()) {
-                            if let Some(low) = args.get("low").and_then(|v| v.as_bool()) {
-                                let res = funcs::edit_soundboard(
-                                    color,
-                                    icon.to_string(),
-                                    name.to_string(),
-                                    sound.to_string(),
-                                    oldname.to_string(),
-                                    low,
-                                );
-                                return json!({"result": res});
-                            }
+                    if let Some(oldname) = args.get("oldname").and_then(|v| v.as_str()) {
+                        if let Some(low) = args.get("low").and_then(|v| v.as_bool()) {
+                            let res = funcs::edit_soundboard(
+                                color,
+                                icon.to_string(),
+                                name.to_string(),
+                                oldname.to_string(),
+                                low,
+                            );
+                            return json!({"result": res});
                         }
                     }
                 }
@@ -199,9 +196,9 @@ fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
         let outputs = funcs::get_outputs();
         return json!({"result": outputs});
     } else if cmd == "play_sound" {
-        if let Some(sound) = args.get("sound").and_then(|v| v.as_str()) {
+        if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
             if let Some(low) = args.get("low").and_then(|v| v.as_bool()) {
-                funcs::play_sound(sound.to_string(), low);
+                funcs::play_sound(name.to_string(), low);
             }
         }
     } else if cmd == "get_volume" {
@@ -294,7 +291,7 @@ pub fn run_server(ready_tx: &std::sync::mpsc::Sender<()>, proxy: EventLoopProxy<
         let path = if request.url() == "/" { "index.html" } else { &request.url()[1..] };
 
         if let Some(file) = Assets::get(path) {
-            let mime = match path.rsplit('.').next() {
+            let mime = match path.rsplit(".").next() {
                 Some("js") => "application/javascript",
                 Some("css") => "text/css",
                 Some("html") => "text/html",

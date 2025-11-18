@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../randoms.dart';
 import '../invoke_js.dart';
-import '../settings/page.dart';
 import 'main_page.dart';
 import 'page.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -109,6 +108,9 @@ class _SoundboardNewState extends State<SoundboardNew> {
                       style: TextStyle(color: text),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: accent),
+                        ),
                         labelText: "Enter name",
                         labelStyle: TextStyle(color: accent),
                         filled: true,
@@ -151,10 +153,13 @@ class _SoundboardNewState extends State<SoundboardNew> {
                             style: TextStyle(color: text),
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: accent),
+                              ),
                               labelText: "Enter Sound Effect",
                               labelStyle: TextStyle(color: accent),
                               filled: true,
-                              fillColor: accent,
+                              fillColor: bg_light,
                             ),
                           )
                         ),
@@ -174,7 +179,7 @@ class _SoundboardNewState extends State<SoundboardNew> {
               const SizedBox(height: 20),
 
               SwitchListTile(
-                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: settings.lightMode ? Color(0xFF000000) : Color(0xFFFFFFFF))),
+                title: Text("Low latency mode", style: TextStyle(fontSize: 18, color: text)),
                 value: lowlatency,
                 activeColor: accent,
                 onChanged: (value) {
