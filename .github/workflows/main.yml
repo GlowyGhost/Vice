@@ -93,7 +93,7 @@ jobs:
       - name: Download Updater
         uses: actions/download-artifact@v4
         with:
-          name: updater-windows
+          name: updater
           path: updater/target/release
 
       - name: Build Tauri app
@@ -116,7 +116,7 @@ jobs:
       - name: Upload debug build
         uses: actions/upload-artifact@v4
         with:
-          name: debug-windows
+          name: debug
           path: target/debug/Vice-debug.exe
 
   app:
@@ -152,7 +152,7 @@ jobs:
       - name: Download Updater
         uses: actions/download-artifact@v4
         with:
-          name: updater-windows
+          name: updater
           path: updater/target/release
 
       - name: Build Tauri app
@@ -163,7 +163,7 @@ jobs:
       - name: Upload release build
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
+          name: release
           path: target/release/Vice.exe
 
   zip:
@@ -177,13 +177,13 @@ jobs:
       - name: Download Debug
         uses: actions/download-artifact@v4
         with:
-          name: debug-windows
+          name: debug
           path: temp
 
       - name: Download Release
         uses: actions/download-artifact@v4
         with:
-          name: release-windows
+          name: release
           path: temp
 
       - name: Package Release Zip
@@ -195,5 +195,5 @@ jobs:
       - name: Upload final zip
         uses: actions/upload-artifact@v4
         with:
-          name: windows
+          name: full-windows
           path: temp/*.zip
