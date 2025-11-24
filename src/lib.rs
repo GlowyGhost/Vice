@@ -27,10 +27,7 @@ pub enum ServerCommand {
     IpcRequest { id: String, cmd: String, args: serde_json::Value },
 }
 
-#[cfg(target_os = "windows")]
-const ICON: &[u8; 105484] = include_bytes!("../icons/icon.ico");
-#[cfg(target_os = "linux")]
-const ICON: &[u8; 12672] = include_bytes!("../icons/icon.png");
+const ICON: &[u8] = include_bytes!("../icons/icon.ico");
 
 fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
     if cmd == "get_soundboard" {
