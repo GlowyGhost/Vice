@@ -197,7 +197,7 @@ pub(crate) fn get_volume(name: String, get: bool, device: bool) -> String {
 pub(crate) fn uninstall() -> Result<String, String> {
     let res: MessageDialogResult = MessageDialog::new()
         .set_title("Uninstall")
-        .set_description("Are you sure you want to uninstall Luauncher?")
+        .set_description("Are you sure you want to uninstall Vice?")
         .set_buttons(rfd::MessageButtons::YesNo)
         .show();
 

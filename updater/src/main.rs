@@ -8,12 +8,14 @@ use std::{
     time::Duration,
     fs::{self, File},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
     net::TcpStream,
+    ffi::CString
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use zip::ZipArchive;
+use winapi::um::winbase::{MoveFileExA, MOVEFILE_DELAY_UNTIL_REBOOT};
 
 fn presskeytoquit() -> Result<(), Box<dyn std::error::Error>> {
     print!("Press any key to exit. This window will close in 10 seconds.");
@@ -53,11 +55,17 @@ fn presskeytoquit() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn delete_folder(dir: String) -> Result<(), Box<dyn std::error::Error>> {
-    if !Path::new(&dir).exists() {
-        return Err("Directory does not exist.".into());
+    let status = Command::new("cmd")
+        .args(["/C", "rmdir", "/S", "/Q", &dir])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+
+    if !status.success() {
+        return Err(format!("Failed to delete folder {}", dir).into());
     }
 
-    return Ok(fs::remove_dir_all(&dir)?);
+    Ok(())
 }
 fn delete_file(path: String) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = Path::new(&path);
@@ -85,7 +93,7 @@ fn close_vice(path: String) -> Result<(), Box<dyn std::error::Error>> {
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    if stdout.contains(process_name) {
+    if !stdout.contains(process_name) {
         return Ok(());
     }
 
@@ -94,22 +102,50 @@ fn close_vice(path: String) -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|n| n.to_str())
         .unwrap_or(&path);
 
-    let _ = Command::new("taskkill")
+    Command::new("taskkill")
         .args(["/F", "/T", "/IM", process_name])
-        .output();
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
 
     Ok(())
 }
-fn is_folder_unlocked(path: String) -> bool {
-    let orig = Path::new(&path);
-    let tmp = orig.with_extension("tmp_check_lock");
+fn schedule_delete(path: &str) {
+    let c_path = CString::new(path).unwrap();
+    unsafe {
+        MoveFileExA(
+            c_path.as_ptr(),
+            std::ptr::null(),
+            MOVEFILE_DELAY_UNTIL_REBOOT,
+        );
+    }
+}
+fn fix_permissions(path: &str) {
+    let _ = Command::new("cmd")
+        .args(["/C", "takeown", "/F", path, "/R", "/D", "Y"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 
-    match fs::rename(orig, &tmp) {
-        Ok(_) => {
-            let _ = fs::rename(&tmp, orig);
-            true
-        }
-        Err(_) => false,
+    let _ = Command::new("cmd")
+        .args(["/C", "icacls", path, "/grant", "Administrators:F", "/T", "/C"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+}
+fn kill_webview2_processes() {
+    let processes = [
+        "msedgewebview2.exe",
+        "WebView2.exe",
+        "WebView2Runtime.exe",
+    ];
+
+    for p in processes {
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", p])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
 }
 fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Error>> {
@@ -137,7 +173,7 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
     let tmp_zip = Path::new("update_tmp.zip");
     fs::write(&tmp_zip, &resp)?;
 
-    print!("\rExtracting...");
+    print!("\rExtracting...                     ");
 
     let file = File::open(&tmp_zip)?;
     let mut archive = ZipArchive::new(file)?;
@@ -168,7 +204,7 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
     }
 
     if !found {
-        print!("\rBinary '{}' not found in archive.", expected_name);
+        print!("\rBinary '{}' not found in archive.           ", expected_name);
         fs::remove_file(tmp_zip)?;
         fs::remove_dir_all(extract_dir)?;
         return Err("None".into());
@@ -176,8 +212,6 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
 
     let new_binary = extract_dir.join(expected_name);
     fs::copy(&new_binary, &old_path)?;
-    print!("\rUpdated successfully to {}!", old_path);
-
     fs::remove_file(tmp_zip)?;
     fs::remove_dir_all(extract_dir)?;
 
@@ -230,29 +264,42 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
 
     let _ = close_vice(old_path.clone());
 
-    //Wait for Unlock
-    print!("\rWaiting for Unlock...");
-    stdout().flush()?;
-
-    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
-
-    loop {
-        if is_folder_unlocked(path_save.clone()) {
-            break;
-        }
-        if !Path::new(&path_save).exists() {
-            break;
-        }
-
-        thread::sleep(Duration::from_millis(1000));
-    }
-
     print!("\rClosed Vice...         ");
     stdout().flush()?;
     println!();
     println!();
 
     let mut errored = false;
+
+    //cache deletion
+    stdout().flush()?;
+    println!();
+
+    print!("Deleting WebView data...");
+
+    let path_cache = std::env::var("APPDATA").unwrap_or_default() + "\\Vice\\Cache";
+
+    kill_webview2_processes();
+    thread::sleep(Duration::from_millis(500));
+    fix_permissions(&path_cache.clone());
+    let res_com = delete_folder(path_cache.clone());
+
+    match res_com {
+        Ok(_) => {
+            print!("\rDeleted WebView data...     ");
+        }
+        Err(e) => {
+            if e.to_string().contains("Directory does not exist") {
+                print!("\rDirectory \"{}\" does not exist. It's been deleted already.", path_cache);
+            } else {
+                print!("\rFailed to delete folder \"{}\": {}", path_cache, e);
+                errored = true;
+            }
+        }
+    }
+    println!();
+    println!();
+    stdout().flush()?;
 
     //Download Update
     match install_update(old_path.clone(), debug) {
@@ -367,23 +414,6 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = close_vice(old_path.clone());
 
-    //Wait for Unlock
-    print!("\rWaiting for Unlock...");
-    stdout().flush()?;
-
-    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
-
-    loop {
-        if is_folder_unlocked(path_save.clone()) {
-            break;
-        }
-        if !Path::new(&path_save).exists() {
-            break;
-        }
-
-        thread::sleep(Duration::from_millis(1000));
-    }
-
     print!("\rClosed Vice...         ");
     stdout().flush()?;
     println!();
@@ -394,23 +424,13 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
     stdout().flush()?;
     println!();
 
-    print!("Deleting Save Data...");
+    print!("Scheduling Save Data Deletion...");
 
-    let res_save = delete_folder(path_save.clone());
+    let path_save = std::env::var("APPDATA").unwrap_or_default() + "\\Vice";
 
-    match res_save {
-        Ok(_) => {
-            print!("\rDeleted Save Data...     ");
-        }
-        Err(e) => {
-            if e.to_string().contains("Directory does not exist") {
-                print!("\rDirectory \"{}\" does not exist. It's been deleted already.", path_save);
-            } else {
-                print!("\rFailed to delete folder \"{}\": {}", path_save, e);
-                errored = true;
-            }
-        }
-    }
+    schedule_delete(&path_save.clone());
+
+    print!("\rScheduled Deletion On Reboot...       ");
     println!();
 
     //Vice deletion

@@ -4,7 +4,7 @@ use serde_json::json;
 use tao::{event::{Event, WindowEvent}, event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget}, window::{Icon, Window, WindowBuilder}};
 use tiny_http::{Header, Response, Server};
 use tray_icon::{Icon as TrayIcon, TrayIconBuilder, menu::{Menu, MenuEvent, MenuItem}};
-use wry::{WebViewBuilder, WebView};
+use wry::{WebContext, WebView, WebViewBuilder};
 
 mod funcs;
 mod performance;
@@ -19,6 +19,7 @@ struct Assets;
 pub struct App {
     window: Option<Window>,
     webview: Option<WebView>,
+    web_context: Option<WebContext>
 }
 
 #[derive(PartialEq)]
@@ -328,11 +329,13 @@ pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, proxy: E
         }
     }
 
-    if app.borrow().webview.is_none() {
+    if app.borrow().webview.is_none() || app.borrow().web_context.is_none() {
         if !hide_window {
-            let webview = WebViewBuilder::new()
+            let cache_dir = files::app_base().join("Cache");
+            let mut web_context = WebContext::new(Some(cache_dir));
+
+            let webview = WebViewBuilder::new_with_web_context(&mut web_context)
                 .with_url("http://127.0.0.1:5923")
-                .with_devtools(true)
                 .with_ipc_handler({
                     let proxy = proxy.clone();
                     move |req| {
@@ -351,6 +354,7 @@ pub fn create_window(event_loop: &EventLoopWindowTarget<ServerCommand>, proxy: E
                 .unwrap();
 
             app.try_borrow_mut().unwrap().webview = Some(webview);
+            app.try_borrow_mut().unwrap().web_context = Some(web_context);
         }
     }
 }
@@ -416,8 +420,9 @@ pub fn run() {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                app.try_borrow_mut().unwrap().webview = None;
                 app.try_borrow_mut().unwrap().window = None;
+                app.try_borrow_mut().unwrap().webview = None;
+                app.try_borrow_mut().unwrap().web_context = None;
             },
             Event::UserEvent(e) => match e {
                 ServerCommand::CreateWindow => create_window(event_loop_target, proxy.clone(), &app, false),

@@ -55,7 +55,7 @@ impl Default for Settings {
 
 const EMBEDDED_BIN: &[u8] = include_bytes!("../updater/target/release/updater.exe");
 
-fn app_base() -> PathBuf {
+pub(crate) fn app_base() -> PathBuf {
     let base = env::var("APPDATA");
 
     match base {
