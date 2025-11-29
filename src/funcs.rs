@@ -229,7 +229,7 @@ pub(crate) fn update() -> Result<String, String> {
         return Ok("No Internet".to_string());
     }
 
-    let url = "https://api.github.com/repos/GlowyGhost/Vice/releases/latest";
+    let url = "https://api.github.com/repos/Glowwy-Dev/Vice/releases/latest";
 
     let client = reqwest::blocking::Client::new();
     let mut res = client

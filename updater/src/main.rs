@@ -152,7 +152,7 @@ fn install_update(old_path: String, debug: String) -> Result<(), Box<dyn std::er
     print!("\rPreparing to download...");
     let client = Client::new();
     let release: Release = client
-        .get("https://api.github.com/repos/GlowyGhost/Vice/releases/latest")
+        .get("https://api.github.com/repos/Glowwy-Dev/Vice/releases/latest")
         .header("User-Agent", "Vice-Updater")
         .send()?
         .json()?;
@@ -334,7 +334,7 @@ fn update(old_path: String, debug: String) -> Result<(), Box<dyn std::error::Err
     println!();
 
     println!("MIT License: ");
-    println!("Copyright (c) 2025 GlowyGhost
+    println!("Copyright (c) 2025 Glowwy-Dev
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the \"Software\"), to deal
@@ -447,7 +447,7 @@ fn uninstall(old_path: String) -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             if e.to_string().contains("Directory does not exist") {
-                print!("\rApplication doesn't exist. This should not happen. If you can reliably reproduce this issue, please report it at https://github.com/GlowyGhost/Vice/issues");
+                print!("\rApplication doesn't exist. This should not happen. If you can reliably reproduce this issue, please report it at https://github.com/Glowwy-Dev/Vice/issues");
                 errored = true;
             } else {
                 print!("\rFailed to delete app: {}", e);
