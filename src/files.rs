@@ -5,6 +5,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
+use windows::{
+    core::{PCWSTR, Interface},
+    Win32::{
+        UI::Shell::{IShellLinkW, ShellLink, FOLDERID_Startup, SHGetKnownFolderPath},
+        System::Com::{IPersistFile, CoInitializeEx, CoCreateInstance, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED},
+    },
+};
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
 pub(crate) struct SoundboardSFX {
@@ -31,7 +38,8 @@ pub(crate) struct Settings {
     pub(crate) scale: f32,
     pub(crate) light: bool,
     pub(crate) monitor: bool,
-    pub(crate) peaks: bool
+    pub(crate) peaks: bool,
+    pub(crate) startup: bool
 }
 
 #[derive(Deserialize, Serialize)]
@@ -49,7 +57,7 @@ impl Default for File {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { output: "".to_string(), scale: 1.0, light: false, monitor: true, peaks: true }
+        Settings { output: "".to_string(), scale: 1.0, light: false, monitor: true, peaks: true, startup: false }
     }
 }
 
@@ -117,6 +125,8 @@ pub(crate) fn create_files() {
             eprintln!("Failed to create soundeffect directory: {}", e);
         }
     }
+
+    manage_startup();
 }
 
 pub(crate) fn fix_settings(broken: Value) -> Settings {
@@ -144,6 +154,10 @@ pub(crate) fn fix_settings(broken: Value) -> Settings {
 
     if let Some(peaks) = broken.get("peaks").and_then(|v| v.as_bool()) {
         settings.peaks = peaks;
+    }
+
+    if let Some(startup) = broken.get("startup").and_then(|v| v.as_bool()) {
+        settings.startup = startup;
     }
 
     settings
@@ -393,4 +407,85 @@ pub(crate) fn extract_updater(arg: &str, path: PathBuf, debug: &str) -> Result<S
         .spawn();
 
     Ok(filename)
+}
+
+pub(crate) fn manage_startup() {
+    let lnk_path: PathBuf = unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_Startup, windows::Win32::UI::Shell::KNOWN_FOLDER_FLAG(0), None).unwrap();
+        let folder_str = path.to_string().unwrap();
+        PathBuf::from(folder_str).join("Vice.lnk")
+    };
+
+    if get_settings().startup == true {
+        if lnk_path.exists() {
+            return;
+        }
+
+        println!("Creating startup shortcut");
+
+        let app = std::env::current_exe().unwrap().to_string_lossy().to_string();
+
+        unsafe {
+            let _ = CoInitializeEx(Some(std::ptr::null_mut()), COINIT_APARTMENTTHREADED)
+                .ok()
+                .map_err(|e| format!("CoInitializeEx failed: {e}"));
+
+            let shell = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+                .map_err(|e| format!("CoCreateInstance failed: {e}"));
+
+            let shell_link: IShellLinkW = match shell {
+                Ok(i) => {i},
+                Err(e) => {
+                    CoUninitialize();
+                    eprintln!("Failed to create startup shortcut: {}", e);
+                    return;
+                }
+            };
+
+            let app_w: Vec<u16> = app.encode_utf16().chain(Some(0)).collect();
+            let _ = shell_link.SetPath(PCWSTR::from_raw(app_w.as_ptr()))
+                .map_err(|e| format!("SetPath failed: {e}"));
+
+            let args_w: Vec<u16> = "--background".encode_utf16().chain(Some(0)).collect();
+            let _ = shell_link.SetArguments(PCWSTR::from_raw(args_w.as_ptr()))
+                .map_err(|e| format!("SetArguments failed: {e}"));
+
+            let persist = shell_link.cast().map_err(|e| format!("cast to IPersistFile failed: {e}"));
+
+            let persist_file: IPersistFile = match persist {
+                Ok(i) => {i},
+                Err(e) => {
+                    CoUninitialize();
+                    eprintln!("Failed to create startup shortcut: {}", e);
+                    return;
+                }
+            };
+
+            let path_w: Vec<u16> = lnk_path.to_string_lossy().to_string().encode_utf16().chain(Some(0)).collect();
+            let save = persist_file.Save(PCWSTR::from_raw(path_w.as_ptr()), true)
+                .map_err(|e| format!("Save failed: {e}"));
+
+            match save {
+                Ok(_) => {
+                    println!("Successfully create startup shortcut.")
+                },
+                Err(e) => {
+                    eprintln!("Failed to create startup shortcut: {}", e);
+                }
+            }
+
+            CoUninitialize();
+        }
+    } else {
+        if !lnk_path.exists() {
+            return;
+        }
+
+        match fs::remove_file(&lnk_path) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Failed to delete startup shortcut: {}", e);
+            }
+        }
+    }
 }

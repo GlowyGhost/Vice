@@ -19,6 +19,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool lightMode = false;
   bool monitor = false;
   bool peaks = true;
+  bool startup = false;
 
   @override
   void initState() {
@@ -35,6 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
       lightMode = settings.lightMode;
       monitor = settings.monitor;
       peaks = settings.peaks;
+      startup = settings.startup;
     });
 	}
 
@@ -45,6 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
       settings.lightMode = lightMode;
       settings.monitor = monitor;
       settings.peaks = peaks;
+      settings.startup = startup;
     });
 
     await settings.saveSettings(context);
@@ -161,7 +164,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 10),
 
                       SwitchListTile(
-                        title: Text("Monitor Performance:", style: TextStyle(fontSize: 18, color: text)),
+                        title: Text("Monitor performance:", style: TextStyle(fontSize: 18, color: text)),
                         value: monitor,
                         activeColor: accent,
                         onChanged: (value) {
@@ -177,6 +180,17 @@ class _SettingsPageState extends State<SettingsPage> {
                         activeColor: accent,
                         onChanged: (value) {
                           setState(() => peaks = value);
+                        },
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      SwitchListTile(
+                        title: Text("Open on startup:", style: TextStyle(fontSize: 18, color: text)),
+                        value: startup,
+                        activeColor: accent,
+                        onChanged: (value) {
+                          setState(() => startup = value);
                         },
                       ),
                     ],
@@ -219,6 +233,7 @@ class SettingsData extends ChangeNotifier {
   bool lightMode = false;
   bool monitor = false;
   bool peaks = true;
+  bool startup = false;
 
 	Future<void> loadSettings() async {
 		final settings = await invokeJS('get_settings');
@@ -227,6 +242,7 @@ class SettingsData extends ChangeNotifier {
     lightMode = settings["light"];
     monitor = settings["monitor"];
     peaks = settings["peaks"];
+    startup = settings["startup"];
     if (settings["output"] != null && settings["output"].trim().isNotEmpty) {
       outputDevice = settings["output"];
     }
@@ -244,7 +260,7 @@ class SettingsData extends ChangeNotifier {
   }
 
 	Future<void> saveSettings(BuildContext context) async {
-		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor, "peaks": peaks});
+		await invokeJS("save_settings", {"output": outputDevice, "scale": scale, "light": lightMode, "monitor": monitor, "peaks": peaks, "startup": startup});
 
     notifyListeners();
 

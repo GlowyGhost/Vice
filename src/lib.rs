@@ -163,14 +163,17 @@ fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
                 if let Some(light) = args.get("light").and_then(|v| v.as_bool()) {
                     if let Some(monitor) = args.get("monitor").and_then(|v| v.as_bool()) {
                         if let Some(peaks) = args.get("peaks").and_then(|v| v.as_bool()) {
-                            let res = funcs::save_settings(
-                                output.to_string(),
-                                scale as f32,
-                                light,
-                                monitor,
-                                peaks,
-                            );
-                            return json!({"result": res});
+                            if let Some(startup) = args.get("startup").and_then(|v| v.as_bool()) {
+                                let res = funcs::save_settings(
+                                    output.to_string(),
+                                    scale as f32,
+                                    light,
+                                    monitor,
+                                    peaks,
+                                    startup
+                                );
+                                return json!({"result": res});
+                            }
                         }
                     }
                 }
