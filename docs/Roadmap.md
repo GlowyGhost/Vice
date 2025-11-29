@@ -11,4 +11,3 @@ Please if you're planning to contributing. Add what you're doing in the roadmap 
 |Visual Scripter|A system to put effects on audio. Kind of like the blueprint system in Unreal Engine or Fusion page in Davinci Resolve.|
 |Thread/Channel Sleeping|When the output device is not in use, the thread managing it will stop, until a device connects to the output.|
 |AI Noise Reduction|A toggle or node in channels to reduce background noise.|
-|Virtual Mic|For Windows, an option to install a virtual mic. Either having the file to run the mic next to the save data or next to the WebView Cache.|
