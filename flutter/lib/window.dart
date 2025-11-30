@@ -102,7 +102,7 @@ class _WindowState extends State<Window> {
                             IconButton(
                               icon: Icon(FontAwesomeIcons.github, color: text),
                               onPressed: () async {
-                                await invokeJS("open_link", {"url": "https://github.com/GlowyGhost/Vice"});
+                                await invokeJS("open_link", {"url": "https://github.com/GlowyDeveloper/Vice"});
                               },
                             )
                           ],
