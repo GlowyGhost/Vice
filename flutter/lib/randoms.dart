@@ -173,3 +173,44 @@ class IconGridDropdown extends StatelessWidget {
     );
   }
 }
+
+class ItemsDropdown extends StatelessWidget {
+  final List<String> items;
+  final ValueChanged<String> onItemSelected;
+
+  const ItemsDropdown({super.key, required this.items, required this.onItemSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: bg_mid,
+      insetPadding: EdgeInsets.all(20),
+      child: Container(
+        width: double.maxFinite,
+        height: 300,
+        padding: EdgeInsets.all(16),
+        child: ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            return InkWell(
+              onTap: () {
+                onItemSelected(items[index]);
+                Navigator.pop(context);
+              },
+              child: Padding(
+                padding: EdgeInsets.all(8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: bg_light,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(items[index], style: TextStyle(fontSize: 30, color: Colors.white)),
+                ),
+              )
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

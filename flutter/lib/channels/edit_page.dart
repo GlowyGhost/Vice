@@ -202,9 +202,9 @@ class _ChannelsEditState extends State<ChannelsEdit> {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (context) => DeviceDropdown(
-                            devices: devicesApps,
-                            onDeviceSelected: (deviceSelected) {
+                          builder: (context) => ItemsDropdown(
+                            items: devicesApps,
+                            onItemSelected: (deviceSelected) {
                               setState(() {selectedDeviceApp = deviceSelected;});
                             },
                           ),
@@ -221,9 +221,9 @@ class _ChannelsEditState extends State<ChannelsEdit> {
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (context) => DeviceDropdown(
-                        devices: ["Capture device", "Capture app"],
-                        onDeviceSelected: (optionSelected) {
+                      builder: (context) => ItemsDropdown(
+                        items: ["Capture device", "Capture app"],
+                        onItemSelected: (optionSelected) {
                           optionSelected == "Capture device"
                             ? device = true
                             : device = false;

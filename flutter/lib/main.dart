@@ -65,7 +65,12 @@ class ScaledWindow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppStateNotifier>(
       builder: (context, appState, _) {
-        final scale = clampDouble(settings.scale, 0.1, 2.0);
+        double scale = clampDouble(settings.scale, 0.1, 2.0);
+        if (scale > 2.0)  {
+          scale = 2.0;
+        } else if (scale < 0.1) {
+          scale = 0.1;
+        }
 
         return LayoutBuilder(
           builder: (context, constraints) {

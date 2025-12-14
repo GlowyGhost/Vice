@@ -217,6 +217,17 @@ fn handle_ipc(cmd: &str, args: serde_json::Value) -> serde_json::Value {
     } else if cmd == "update" {
         let res = funcs::update();
         return json!({"result": res});
+    } else if cmd == "save_blocks" {
+        if let Some(item) = args.get("item").and_then(|v| v.as_str()) {
+            if let Some(blocks) = args.get("blocks").and_then(|v| v.as_str()) {
+                funcs::save_blocks(item.to_string(), blocks.to_string());
+            }
+        }
+    } else if cmd == "load_blocks" {
+        if let Some(item) = args.get("item").and_then(|v| v.as_str()) {
+            let res = funcs::load_blocks(item.to_string());
+            return json!({"result": res});
+        }
     } else if cmd == "flutter_print" {
         if let Some(text) = args.get("text").and_then(|v| v.as_str()) {
             println!("{}", text);

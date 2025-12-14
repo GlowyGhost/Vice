@@ -3,7 +3,7 @@
 <img src="docs/128.png" width="128px" />
 
 # Vice
-### A Microphone Util App for Windows
+### A Powerful Audio Mixer For Windows
 
 </div>
 

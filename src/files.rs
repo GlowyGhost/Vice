@@ -70,21 +70,17 @@ pub(crate) fn app_base() -> PathBuf {
         Ok(s) => return PathBuf::from(s).join("Vice"),
         Err(e) => {
             eprintln!("Error occured when getting App Base: {:#?}", e);
-            return env::temp_dir();
+            return env::temp_dir().join("Vice");
         }
     }
 }
 
 pub(crate) fn sfx_base() -> PathBuf {
-    let base = env::var("APPDATA");
+    app_base().join("SFXs")
+}
 
-    match base {
-        Ok(s) => return PathBuf::from(s).join("Vice").join("SFXs"),
-        Err(e) => {
-            eprintln!("Error occured when getting SFXs Base: {:#?}", e);
-            return env::temp_dir().join("SFXs");
-        }
-    }
+pub(crate) fn blocks_base() -> PathBuf {
+    app_base().join("Blocks")
 }
 
 fn settings_json() -> PathBuf {
@@ -123,6 +119,14 @@ pub(crate) fn create_files() {
     if !sfxs_path.exists() {
         if let Err(e) = fs::create_dir_all(sfxs_path) {
             eprintln!("Failed to create soundeffect directory: {}", e);
+        }
+    }
+
+    let blocks_path: PathBuf = blocks_base();
+
+    if !blocks_path.exists() {
+        if let Err(e) = fs::create_dir_all(blocks_path) {
+            eprintln!("Failed to create blocks directory: {}", e);
         }
     }
 

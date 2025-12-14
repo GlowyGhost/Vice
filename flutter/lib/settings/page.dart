@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vice/randoms.dart';
-import '../channels/page.dart';
 import '../invoke_js.dart';
 import '../main.dart';
 
@@ -115,9 +114,9 @@ class _SettingsPageState extends State<SettingsPage> {
                               onPressed: () {
                                 showDialog(
                                   context: context,
-                                  builder: (context) => DeviceDropdown(
-                                    devices: settings.devices,
-                                    onDeviceSelected: (optionSelected) {
+                                  builder: (context) => ItemsDropdown(
+                                    items: settings.devices,
+                                    onItemSelected: (optionSelected) {
                                       setState(() {outputDevice = optionSelected;});
                                     },
                                   ),

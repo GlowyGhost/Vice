@@ -269,3 +269,31 @@ pub(crate) fn update() -> Result<String, String> {
     }
     Ok("Undid".to_string())
 }
+
+pub(crate) fn save_blocks(item: String, blocks: String) {
+    if files::blocks_base().join(format!("{}.json", item)).exists() {
+        if let Err(e) = fs::remove_file(files::blocks_base().join(format!("{}.json", item))) {
+            eprintln!("Failed to remove existing blocks file for item \"{}\": {:#?}", item, e);
+            return;
+        }
+    }
+
+    if let Err(e) = fs::write(files::blocks_base().join(format!("{}.json", item)), blocks) {
+        eprintln!("Failed to write blocks file for item \"{}\": {:#?}", item, e);
+    }
+}
+
+pub(crate) fn load_blocks(item: String) -> String {
+    let path = files::blocks_base().join(format!("{}.json", item));
+    if path.exists() {
+        match fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("Failed to read blocks file for item \"{}\": {:#?}", item, e);
+                "[]".to_string()
+            }
+        }
+    } else {
+        "[]".to_string()
+    }
+}

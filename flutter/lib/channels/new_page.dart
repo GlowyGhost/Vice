@@ -168,9 +168,9 @@ class _ChannelsNewState extends State<ChannelsNew> {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (context) => DeviceDropdown(
-                            devices: devicesApps,
-                            onDeviceSelected: (deviceSelected) {
+                          builder: (context) => ItemsDropdown(
+                            items: devicesApps,
+                            onItemSelected: (deviceSelected) {
                               setState(() {selectedDeviceApp = deviceSelected;});
                             },
                           ),
@@ -187,9 +187,9 @@ class _ChannelsNewState extends State<ChannelsNew> {
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (context) => DeviceDropdown(
-                        devices: ["Capture device", "Capture app"],
-                        onDeviceSelected: (optionSelected) {
+                      builder: (context) => ItemsDropdown(
+                        items: ["Capture device", "Capture app"],
+                        onItemSelected: (optionSelected) {
                           optionSelected == "Capture device"
                             ? device = true
                             : device = false;

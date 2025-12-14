@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vice/blocks/page.dart';
 import 'package:vice/main.dart';
 import 'package:vice/randoms.dart';
 import 'invoke_js.dart';
@@ -9,7 +10,7 @@ import 'soundboard/page.dart';
 import 'channels/page.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-enum WindowPage { channels, soundboard, settings, performance }
+enum WindowPage { Channels, Soundboard, Settings, Performance, Blocks }
 
 class Window extends StatefulWidget {
   const Window({super.key});
@@ -19,7 +20,7 @@ class Window extends StatefulWidget {
 }
 
 class _WindowState extends State<Window> {
-  WindowPage _currentPage = WindowPage.channels;
+  WindowPage _currentPage = WindowPage.Channels;
 
   @override
   Widget build(BuildContext context) {
@@ -45,11 +46,11 @@ class _WindowState extends State<Window> {
                 children: [
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.channels ? text : text_muted,
+                      foregroundColor: _currentPage == WindowPage.Channels ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
-                    onPressed: () => setState(() => _currentPage = WindowPage.channels),
+                    onPressed: () => setState(() => _currentPage = WindowPage.Channels),
                     child: Text("Channels", style: TextStyle(fontSize: 32)),
                   ),
 
@@ -57,11 +58,11 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.soundboard ? text : text_muted,
+                      foregroundColor: _currentPage == WindowPage.Soundboard ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
-                    onPressed: () => setState(() => _currentPage = WindowPage.soundboard),
+                    onPressed: () => setState(() => _currentPage = WindowPage.Soundboard),
                     child: Text("Soundboard", style: TextStyle(fontSize: 32)),
                   ),
 
@@ -69,17 +70,29 @@ class _WindowState extends State<Window> {
 
                   TextButton(
                     style: TextButton.styleFrom(
-                      foregroundColor: _currentPage == WindowPage.settings ? text : text_muted,
+                      foregroundColor: _currentPage == WindowPage.Settings ? text : text_muted,
                       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                       alignment: Alignment.centerLeft,
                     ),
-                    onPressed: () => setState(() => _currentPage = WindowPage.settings),
+                    onPressed: () => setState(() => _currentPage = WindowPage.Settings),
                     child: Text("Settings", style: TextStyle(fontSize: 32)),
                   ),
 
                   const SizedBox(height: 10),
 
                   performance(),
+
+                  const SizedBox(height: 10),
+
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: _currentPage == WindowPage.Blocks ? text : text_muted,
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                      alignment: Alignment.centerLeft,
+                    ),
+                    onPressed: () => setState(() => _currentPage = WindowPage.Blocks),
+                    child: Text("Blocks", style: TextStyle(fontSize: 32)),
+                  ),
 
                   Spacer(),
 
@@ -119,10 +132,11 @@ class _WindowState extends State<Window> {
             child: Container(
               color: bg_dark,
               child: switch (_currentPage) {
-                WindowPage.channels => ChannelsManagerDisplay(),
-                WindowPage.soundboard => SoundboardManagerDisplay(),
-                WindowPage.settings => SettingsPage(),
-                WindowPage.performance => PerformancePage()
+                WindowPage.Channels => ChannelsManagerDisplay(),
+                WindowPage.Soundboard => SoundboardManagerDisplay(),
+                WindowPage.Settings => SettingsPage(),
+                WindowPage.Performance => PerformancePage(),
+                WindowPage.Blocks => BlocksManagerDisplay()
               }
             )
           )
@@ -135,11 +149,11 @@ class _WindowState extends State<Window> {
     if (settings.monitor == true) {
       return TextButton(
         style: TextButton.styleFrom(
-          foregroundColor: _currentPage == WindowPage.performance ? text : text_muted,
+          foregroundColor: _currentPage == WindowPage.Performance ? text : text_muted,
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
           alignment: Alignment.centerLeft,
         ),
-        onPressed: () => setState(() => _currentPage = WindowPage.performance),
+        onPressed: () => setState(() => _currentPage = WindowPage.Performance),
         child: Text("Performance", style: TextStyle(fontSize: 32)),
       );
     }
