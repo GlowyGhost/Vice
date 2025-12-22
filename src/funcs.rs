@@ -278,9 +278,28 @@ pub(crate) fn save_blocks(item: String, blocks: String) {
         }
     }
 
-    if let Err(e) = fs::write(files::blocks_base().join(format!("{}.json", item)), blocks) {
+    let json: serde_json::Value = match serde_json::from_str::<serde_json::Value>(&blocks) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to parse blocks file: {}", e);
+            return;
+        }
+    };
+
+    let pretty: String = match serde_json::to_string_pretty(&json) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to make json pretty: {}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = fs::write(files::blocks_base().join(format!("{}.json", item)), pretty) {
         eprintln!("Failed to write blocks file for item \"{}\": {:#?}", item, e);
+        return;
     }
+
+    audio::restart();
 }
 
 pub(crate) fn load_blocks(item: String) -> String {

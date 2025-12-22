@@ -1,7 +1,5 @@
 use std::{
-    ffi::{c_char, CStr, CString},
-    sync::{atomic::{AtomicBool, Ordering}},
-    thread
+    ffi::{CStr, CString, c_char}, fs, sync::atomic::{AtomicBool, Ordering}, thread
 };
 
 use crate::files::{self, Channel};
@@ -14,12 +12,58 @@ unsafe extern "C" {
     fn get_inputs(len: *mut usize) -> *const *const c_char;
     fn get_apps(len: *mut usize) -> *const *const c_char;
     fn play_sound(file: *const c_char, device_name: *const c_char, low_latency: bool);
-    fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
+    fn device_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char, path: *const c_char);
     fn app_to_device(input: *const c_char, output: *const c_char, low_latency: bool, channel_name: *const c_char);
     fn insert_volume(key: *const c_char, value: f32);
     fn reset_volume();
     fn get_volume(name: *const c_char, get: bool, device: bool) -> *const c_char;
     fn free_cstr(ptr: *const c_char);
+}
+
+fn get_blocks(channel_name: String) -> String {
+    let path: std::path::PathBuf = files::blocks_base().join(format!("{}.json", channel_name));
+    let mut json_str: String = "[]".to_string();
+    if path.exists() {
+        match fs::read_to_string(path) {
+            Ok(content) => {json_str = content;},
+            Err(e) => {
+                eprintln!("Failed to read blocks file for item \"{}\": {:#?}", channel_name, e);
+            }
+        };
+    }
+
+    let json: serde_json::Value = match serde_json::from_str::<serde_json::Value>(&json_str) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to parse blocks file: {}", e);
+            serde_json::json!([])
+        }
+    };
+
+
+    let mut parsed = "".to_string();
+    for block in json.as_array().unwrap_or(&vec![]) {
+        let b = block.as_object().unwrap();
+        let block_type = b.get("type").unwrap().as_str().unwrap_or("");
+        parsed = format!("{}{}", parsed, block_type);
+
+        if let Some(time) = b.get("time") {
+            parsed = format!("{} time={}", parsed, time.as_i64().unwrap_or(0).to_string());
+        }
+        if let Some(intensity) = b.get("intensity") {
+            parsed = format!("{} intensity={}", parsed, intensity.as_i64().unwrap_or(0).to_string());
+        }
+        if let Some(amount) = b.get("amount") {
+            parsed = format!("{} amount={}", parsed, amount.as_i64().unwrap_or(0).to_string());
+        }
+        if let Some(threshold) = b.get("threshold") {
+            parsed = format!("{} threshold={}", parsed, threshold.as_i64().unwrap_or(0).to_string());
+        }
+
+        parsed = format!("{}\n", parsed);
+    }
+
+    parsed
 }
 
 pub(crate) fn outputs() -> Vec<String> {
@@ -93,13 +137,15 @@ fn manage_device(input_device_name: String, output_device_name: String, low_late
         true => None,
         false => Some(CString::new(output_device_name).unwrap())
     };
-    let name_cstr: CString = CString::new(channel_name).unwrap();
+    let name_cstr: CString = CString::new(channel_name.clone()).unwrap();
+    let path_cstr: CString = CString::new(get_blocks(channel_name)).unwrap();
 
     let input: *const i8 = input_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
     let output: *const i8 = output_cstr.as_ref().map_or(std::ptr::null(), |cstr| cstr.as_ptr());
     let name: *const i8 = name_cstr.as_ptr();
+    let path: *const i8 = path_cstr.as_ptr();
 
-    unsafe {device_to_device(input, output, low_latency, name)};
+    unsafe {device_to_device(input, output, low_latency, name, path)};
 }
 
 fn manage_app(app_name: String, output_device_name: String, low_latency: bool, channel_name: String) {

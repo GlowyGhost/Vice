@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../randoms.dart';
 
-class CompressionBlock extends StatelessWidget {
+class GainBlock extends StatelessWidget {
   final double? amount;
   final bool interactable;
   final ValueChanged<double>? onChanged;
   final Function? onDelete;
 
-  const CompressionBlock({
+  const GainBlock({
     super.key,
     this.amount,
     this.interactable = true,
@@ -19,7 +19,7 @@ class CompressionBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.teal,
+        color: Colors.pinkAccent,
         borderRadius: BorderRadius.circular(8),
       ),
       height: 100,
@@ -29,7 +29,7 @@ class CompressionBlock extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Text(
-                "COMPRESSION",
+                "GAIN",
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -42,16 +42,16 @@ class CompressionBlock extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Slider(
-                      value: amount ?? 50,
+                      value: amount ?? 1,
                       min: 0,
-                      max: 100,
-                      divisions: 100,
+                      max: 3,
+                      divisions: 30,
                       activeColor: accent,
                       label: amount?.toStringAsFixed(1),
                       onChanged: interactable ? onChanged : null,
                     ),
                     Text(
-                      "Amount: ${amount?.toStringAsFixed(1) ?? '50'}%",
+                      "Time: ${amount?.toStringAsFixed(1) ?? '1'}x",
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ],
@@ -68,7 +68,7 @@ class CompressionBlock extends StatelessWidget {
             ),
           ),
         ],
-      )
+      ),
     );
   }
 }

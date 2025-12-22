@@ -5,6 +5,7 @@ import '../randoms.dart';
 import 'types/compression.dart';
 import 'types/delay.dart';
 import 'types/distortion.dart';
+import 'types/gain.dart';
 import 'types/gating.dart';
 import 'types/reverb.dart';
 
@@ -14,6 +15,7 @@ final Map<String, Widget> blockTypes = {
   "distortion": DistortionBlock(interactable: false),
   "gating": GatingBlock(interactable: false),
   "reverb": ReverbBlock(interactable: false),
+  "gain": GainBlock(interactable: false),
 };
 
 class BlocksView extends StatefulWidget {
@@ -102,7 +104,12 @@ class _BlocksViewState extends State<BlocksView> {
                                 setState(() {
                                   block["time"] = newTime;
                                 });
-                              }
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
                             )
                           );
                         case "reverb":
@@ -115,7 +122,12 @@ class _BlocksViewState extends State<BlocksView> {
                                 setState(() {
                                   block["intensity"] = newIntensity;
                                 });
-                              }
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
                             )
                           );
                         case "compression":
@@ -128,7 +140,12 @@ class _BlocksViewState extends State<BlocksView> {
                                 setState(() {
                                   block["amount"] = newAmount;
                                 });
-                              }
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
                             )
                           );
                         case "distortion":
@@ -141,7 +158,30 @@ class _BlocksViewState extends State<BlocksView> {
                                 setState(() {
                                   block["intensity"] = newIntensity;
                                 });
-                              }
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
+                            )
+                          );
+                        case "gain":
+                          return Padding(
+                            padding: EdgeInsetsGeometry.all(8),
+                            child: GainBlock(
+                              amount: block["amount"],
+                              interactable: true,
+                              onChanged: (newAmount) {
+                                setState(() {
+                                  block["amount"] = newAmount;
+                                });
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
                             )
                           );
                         case "gating":
@@ -154,7 +194,12 @@ class _BlocksViewState extends State<BlocksView> {
                                 setState(() {
                                   block["threshold"] = newThreshold;
                                 });
-                              }
+                              },
+                              onDelete: () => {
+                                setState(() {
+                                  Blocks.removeAt(index);
+                                })
+                              },
                             )
                           );
                         default:
@@ -209,6 +254,11 @@ class _BlocksViewState extends State<BlocksView> {
                             case "distortion":
                               setState(() {
                                 Blocks.add({"type": "distortion", "intensity": 50.0});
+                              });
+                              break;
+                            case "gain":
+                              setState(() {
+                                Blocks.add({"type": "gain", "amount": 1});
                               });
                               break;
                             case "gating":

@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cmath>
 #include <chrono>
+#include <blocks.hpp>
 #define NOMINMAX
 #include <windows.h>
 #include <mmdeviceapi.h>
@@ -847,7 +848,7 @@ extern "C" {
     }
     #pragma endregion
     #pragma region Device to Device
-    void device_to_device(const char* input, const char* output, bool low_latency, const char* channel_name) {
+    void device_to_device(const char* input, const char* output, bool low_latency, const char* channel_name, const char* path) {
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
         IMMDevice* captureDevice = find_device_by_name(eCapture, input);
@@ -939,6 +940,9 @@ extern "C" {
         captureClient->Start();
         renderClient->Start();
 
+        BlocksManager blocks = BlocksManager{};
+        blocks.Initialize(path, wfRender->nSamplesPerSec);
+
         while (!stop_audio.load()) {
             UINT32 packetFrames = 0;
             if (FAILED(pCapture->GetNextPacketSize(&packetFrames)) || packetFrames == 0) {
@@ -987,6 +991,10 @@ extern "C" {
             } else {
                 toRender = captureBuffer.data();
                 outFrames = numFrames;
+            }
+
+            for (size_t i = 0; i < outFrames * renderChannels; ++i) {
+                toRender[i] = blocks.Render(&toRender[i]);
             }
 
             size_t written = 0;

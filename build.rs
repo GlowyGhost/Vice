@@ -2,6 +2,7 @@ fn main() {
     cc::Build::new()
         .cpp(true)
         .file("src/audio/audio.cpp")
+        .include("src/audio")
         .compile("audio");
 
     cc::Build::new()
